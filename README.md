@@ -17,7 +17,11 @@ A high-performance CLI tool for synchronizing files between Minio buckets, optim
 
 ### Option 1: Using go install
 ```bash
-go install github.com/chmdznr/minio-simple-copier@latest
+# Make sure CGO is enabled
+export CGO_ENABLED=1
+
+# Install the tool
+go install github.com/chmdznr/minio-simple-copier/v2@latest
 ```
 
 ### Option 2: Building from Source
@@ -30,22 +34,37 @@ cd minio-simple-copier
 
 2. Install dependencies:
 ```bash
+# On Debian/Ubuntu, install SQLite development files
+sudo apt-get install gcc sqlite3 libsqlite3-dev
+
+# On CentOS/RHEL
+sudo yum install gcc sqlite-devel
+
+# On macOS with Homebrew
+brew install sqlite3
+
+# On Windows with MSYS2
+pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-sqlite3
+
+# Download Go dependencies
 go mod download
 ```
 
 3. Build the binary:
 ```bash
-# For Windows
-go build -o minio-simple-copier.exe
-
-# For Linux/Mac
+# Enable CGO and build
+export CGO_ENABLED=1
 go build -o minio-simple-copier
+
+# For Windows
+set CGO_ENABLED=1
+go build -o minio-simple-copier.exe
 ```
 
 4. (Optional) Install to your system:
 ```bash
 # Install to $GOPATH/bin
-go install
+CGO_ENABLED=1 go install
 
 # Or copy the binary to a location in your PATH
 # Windows example:
@@ -54,8 +73,6 @@ copy minio-simple-copier.exe %USERPROFILE%\go\bin\
 # Linux/Mac example:
 cp minio-simple-copier ~/go/bin/
 ```
-
-The compiled binary will be available in the current directory. Make sure it's in your system's PATH to run it from anywhere.
 
 ### Requirements
 
