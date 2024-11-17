@@ -75,23 +75,36 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 	// Debug: Print project config
 	log.Printf("Project config for %s: %+v", projectName, minioConfig)
 
+	// Make deep copies of all structs
 	config := ProjectConfig{
 		ProjectName: projectName,
-		SourceMinio: minioConfig.Source,
-		DestType:    minioConfig.DestType,
+		SourceMinio: MinioConfig{
+			Endpoint:        minioConfig.Source.Endpoint,
+			AccessKeyID:     minioConfig.Source.AccessKeyID,
+			SecretAccessKey: minioConfig.Source.SecretAccessKey,
+			UseSSL:         minioConfig.Source.UseSSL,
+			BucketName:     minioConfig.Source.BucketName,
+		},
+		DestType:     minioConfig.DestType,
 		DatabasePath: filepath.Join("projects", projectName, "files.db"),
 	}
 
 	switch minioConfig.DestType {
 	case DestinationMinio:
 		if minioConfig.Dest != nil {
-			dest := *minioConfig.Dest
-			config.DestMinio = dest
+			config.DestMinio = MinioConfig{
+				Endpoint:        minioConfig.Dest.Endpoint,
+				AccessKeyID:     minioConfig.Dest.AccessKeyID,
+				SecretAccessKey: minioConfig.Dest.SecretAccessKey,
+				UseSSL:         minioConfig.Dest.UseSSL,
+				BucketName:     minioConfig.Dest.BucketName,
+			}
 		}
 	case DestinationLocal:
 		if minioConfig.Local != nil {
-			local := *minioConfig.Local
-			config.DestLocal = local
+			config.DestLocal = LocalConfig{
+				Path: minioConfig.Local.Path,
+			}
 		}
 	}
 
@@ -103,15 +116,29 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 
 func (c *FileConfig) SetProjectConfig(projectName string, config ProjectConfig) {
 	minioConfig := ProjectMinioConfig{
-		Source:   config.SourceMinio,
+		Source: MinioConfig{
+			Endpoint:        config.SourceMinio.Endpoint,
+			AccessKeyID:     config.SourceMinio.AccessKeyID,
+			SecretAccessKey: config.SourceMinio.SecretAccessKey,
+			UseSSL:         config.SourceMinio.UseSSL,
+			BucketName:     config.SourceMinio.BucketName,
+		},
 		DestType: config.DestType,
 	}
 
 	switch config.DestType {
 	case DestinationMinio:
-		minioConfig.Dest = &config.DestMinio
+		minioConfig.Dest = &MinioConfig{
+			Endpoint:        config.DestMinio.Endpoint,
+			AccessKeyID:     config.DestMinio.AccessKeyID,
+			SecretAccessKey: config.DestMinio.SecretAccessKey,
+			UseSSL:         config.DestMinio.UseSSL,
+			BucketName:     config.DestMinio.BucketName,
+		}
 	case DestinationLocal:
-		minioConfig.Local = &config.DestLocal
+		minioConfig.Local = &LocalConfig{
+			Path: config.DestLocal.Path,
+		}
 	}
 
 	c.Projects[projectName] = minioConfig

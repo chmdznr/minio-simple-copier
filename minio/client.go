@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/chmdznr/minio-simple-copier/v2/config"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/chmdznr/minio-simple-copier/v2/config"
 )
 
 type MinioClient struct {
@@ -17,8 +17,14 @@ type MinioClient struct {
 }
 
 func NewMinioClient(cfg config.MinioConfig) (*MinioClient, error) {
-	// Make a copy of the config to prevent modifications
-	minioConfig := cfg
+	// Make a deep copy of the config
+	minioConfig := config.MinioConfig{
+		Endpoint:        cfg.Endpoint,
+		AccessKeyID:     cfg.AccessKeyID,
+		SecretAccessKey: cfg.SecretAccessKey,
+		UseSSL:         cfg.UseSSL,
+		BucketName:     cfg.BucketName,
+	}
 
 	// Debug: Print minio config
 	log.Printf("Creating Minio client with config: %+v", minioConfig)
