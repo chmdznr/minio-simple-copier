@@ -202,6 +202,9 @@ func main() {
 	cfg := projectConfig
 	cfg.DatabasePath = filepath.Join(projectDir, "files.db")
 
+	// Debug: Print config before overrides
+	log.Printf("Config before overrides: UseSSL=%v", cfg.SourceMinio.UseSSL)
+
 	// Override with command line values if provided
 	if *sourceEndpoint != "" {
 		cfg.SourceMinio.Endpoint = *sourceEndpoint
@@ -215,7 +218,19 @@ func main() {
 	if *sourceBucket != "" {
 		cfg.SourceMinio.BucketName = *sourceBucket
 	}
-	cfg.SourceMinio.UseSSL = *sourceUseSSL
+	// Only override UseSSL if the flag was explicitly set
+	sourceUseSSLSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "source-use-ssl" {
+			sourceUseSSLSet = true
+		}
+	})
+	if sourceUseSSLSet {
+		cfg.SourceMinio.UseSSL = *sourceUseSSL
+	}
+
+	// Debug: Print config after overrides
+	log.Printf("Config after overrides: UseSSL=%v", cfg.SourceMinio.UseSSL)
 
 	// Handle destination overrides based on type
 	if *destType != "minio" && *destType != "local" {
@@ -236,7 +251,16 @@ func main() {
 		if *destBucket != "" {
 			cfg.DestMinio.BucketName = *destBucket
 		}
-		cfg.DestMinio.UseSSL = *destUseSSL
+		// Only override UseSSL if the flag was explicitly set
+		destUseSSLSet := false
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name == "dest-use-ssl" {
+				destUseSSLSet = true
+			}
+		})
+		if destUseSSLSet {
+			cfg.DestMinio.UseSSL = *destUseSSL
+		}
 	case config.DestinationLocal:
 		if *localDestPath != "" {
 			cfg.DestLocal.Path = *localDestPath
