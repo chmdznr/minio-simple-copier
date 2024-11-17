@@ -79,16 +79,19 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 		ProjectName: projectName,
 		SourceMinio: minioConfig.Source,
 		DestType:    minioConfig.DestType,
+		DatabasePath: filepath.Join("projects", projectName, "files.db"),
 	}
 
 	switch minioConfig.DestType {
 	case DestinationMinio:
 		if minioConfig.Dest != nil {
-			config.DestMinio = *minioConfig.Dest
+			dest := *minioConfig.Dest
+			config.DestMinio = dest
 		}
 	case DestinationLocal:
 		if minioConfig.Local != nil {
-			config.DestLocal = *minioConfig.Local
+			local := *minioConfig.Local
+			config.DestLocal = local
 		}
 	}
 
