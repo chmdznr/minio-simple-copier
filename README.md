@@ -12,6 +12,8 @@ A high-performance CLI tool for synchronizing files between Minio buckets, optim
 - ETag-based file change detection
 - Support for large files using multipart upload
 - Graceful handling of interruptions
+- Folder-specific copying support
+- Automatic retry on network timeouts
 
 ## Installation
 
@@ -101,156 +103,93 @@ minio-simple-copier -command help
 minio-simple-copier -h
 ```
 
-### Basic Usage
+### Configuration Examples
 
-First, save your configuration. You can choose between two destination types:
-
-#### Option 1: Minio-to-Minio Sync
+#### 1. Minio-to-Minio Sync (Full Bucket)
 ```bash
-# Save project configuration for Minio-to-Minio sync
-minio-simple-copier -project myproject \
-    -command config \
-    -dest-type minio \
-    -source-endpoint source-minio:9000 \
-    -source-access-key YOUR_ACCESS_KEY \
-    -source-secret-key YOUR_SECRET_KEY \
-    -source-bucket source-bucket \
-    -dest-endpoint dest-minio:9000 \
-    -dest-access-key YOUR_ACCESS_KEY \
-    -dest-secret-key YOUR_SECRET_KEY \
-    -dest-bucket dest-bucket
+# Configure Minio-to-Minio sync
+minio-simple-copier -project backup -command config \
+  -source-endpoint source-minio:9000 \
+  -source-bucket source-bucket \
+  -dest-type minio \
+  -dest-endpoint dest-minio:9000 \
+  -dest-bucket dest-bucket
 ```
 
-#### Option 2: Minio-to-Local Sync
+#### 2. Minio-to-Local Sync (Full Bucket)
 ```bash
-# Save project configuration for Minio-to-Local sync
-minio-simple-copier -project myproject \
-    -command config \
-    -dest-type local \
-    -source-endpoint source-minio:9000 \
-    -source-access-key YOUR_ACCESS_KEY \
-    -source-secret-key YOUR_SECRET_KEY \
-    -source-bucket source-bucket \
-    -local-path "D:/backup/minio-files"
+# Configure Minio-to-Local sync
+minio-simple-copier -project local-backup -command config \
+  -source-endpoint minio:9000 \
+  -source-bucket mybucket \
+  -dest-type local \
+  -local-path "/data/backup/minio-files"
 ```
 
-Then you can run commands without specifying connection details each time:
+#### 3. Folder-Specific Sync
 ```bash
-# Update file list
+# Configure sync for a specific folder
+minio-simple-copier -project folder-backup -command config \
+  -source-endpoint minio:9000 \
+  -source-bucket mybucket \
+  -source-folder "documents/2024" \
+  -dest-type local \
+  -local-path "/data/backup/2024-docs"
+```
+
+### Running Sync Operations
+
+After configuring a project, you can run sync operations:
+
+```bash
+# 1. Update the file list
 minio-simple-copier -project myproject -command update-list
 
-# Start synchronization
+# 2. Start synchronization with 10 concurrent workers
 minio-simple-copier -project myproject -command sync -workers 10
 
-# Check status
+# 3. Check sync status
 minio-simple-copier -project myproject -command status
 ```
 
-You can also override saved configuration values by providing them in the command line:
+### SSL Configuration
+
+By default, SSL settings are read from your config file. You can override them using flags:
+
 ```bash
-# Use different source bucket and local path for this run
-minio-simple-copier -project myproject \
-    -command sync \
-    -source-bucket different-bucket \
-    -local-path "E:/different-backup"
+# Explicitly enable SSL
+minio-simple-copier -project myproject -command sync -source-use-ssl=true
+
+# Explicitly disable SSL
+minio-simple-copier -project myproject -command sync -source-use-ssl=false
 ```
 
-### Configuration File
+### Error Handling
 
-The tool stores connection details in `projects/config.yaml`:
+The tool includes automatic retry logic for network timeouts and connection errors:
+- Maximum retries: 3
+- Retry interval: 5 seconds
+- Retryable errors: Network timeouts, connection errors, context deadline exceeded
+
+## Configuration File
+
+The tool stores configuration in `projects/config.yaml`. Example configuration:
 
 ```yaml
 projects:
-  myproject-minio:
+  backup:
     source:
       endpoint: source-minio:9000
-      accessKeyID: YOUR_ACCESS_KEY
-      secretAccessKey: YOUR_SECRET_KEY
-      useSSL: true
-      bucketName: source-bucket
-    destType: minio
-    dest:
-      endpoint: dest-minio:9000
-      accessKeyID: YOUR_ACCESS_KEY
-      secretAccessKey: YOUR_SECRET_KEY
-      useSSL: true
-      bucketName: dest-bucket
-  myproject-local:
-    source:
-      endpoint: source-minio:9000
-      accessKeyID: YOUR_ACCESS_KEY
-      secretAccessKey: YOUR_SECRET_KEY
-      useSSL: true
-      bucketName: source-bucket
+      accesskeyid: admin
+      secretaccesskey: secret123
+      usessl: false
+      bucketname: source-bucket
+      folderpath: documents/2024  # Optional: sync specific folder
     destType: local
     local:
-      path: "D:/backup/minio-files"
+      path: /data/backup/2024-docs
 ```
-
-### Command Line Options
-
-```
-  -project string
-        Project name (required)
-  -command string
-        Command to execute (config, update-list, sync, status, help)
-  -workers int
-        Number of concurrent workers (default 5)
-
-  Source Minio Configuration (optional after config):
-  -source-endpoint string
-        Source Minio endpoint
-  -source-access-key string
-        Source Minio access key
-  -source-secret-key string
-        Source Minio secret key
-  -source-bucket string
-        Source Minio bucket
-  -source-use-ssl
-        Use SSL for source Minio (default true)
-
-  Destination Configuration:
-  -dest-type string
-        Destination type (minio or local) (default "minio")
-  -local-path string
-        Local destination path (when dest-type is local)
-
-  Destination Minio Configuration (when dest-type is minio):
-  -dest-endpoint string
-        Destination Minio endpoint
-  -dest-access-key string
-        Destination Minio access key
-  -dest-secret-key string
-        Destination Minio secret key
-  -dest-bucket string
-        Destination Minio bucket
-  -dest-use-ssl
-        Use SSL for destination Minio (default true)
-```
-
-## Project Structure
-
-The tool creates a project directory under `./projects/<project-name>/` containing:
-- `files.db`: SQLite database storing file information and sync status
-- `config.yaml`: Configuration file storing Minio connection details
-
-## File States
-
-Files in the database can have the following states:
-- `pending`: File needs to be synced
-- `copying`: File is currently being copied
-- `completed`: File has been successfully copied
-- `exists`: File already exists in destination
-- `error`: Error occurred during sync
-
-## Performance Considerations
-
-- Uses SQLite for efficient file tracking
-- Implements concurrent file transfers
-- Supports multipart upload for large files
-- Uses ETag comparison to detect changes
-- Batch processing of file operations
 
 ## License
 
-MIT License
+MIT License - see LICENSE file for details.

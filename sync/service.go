@@ -27,20 +27,7 @@ type SyncStatus struct {
 }
 
 func NewService(cfg config.ProjectConfig) (*Service, error) {
-	// Make a deep copy of the source config
-	sourceCfg := config.MinioConfig{
-		Endpoint:        cfg.SourceMinio.Endpoint,
-		AccessKeyID:     cfg.SourceMinio.AccessKeyID,
-		SecretAccessKey: cfg.SourceMinio.SecretAccessKey,
-		UseSSL:         cfg.SourceMinio.UseSSL,
-		BucketName:     cfg.SourceMinio.BucketName,
-	}
-
-	// Debug: Print source config before and after copy
-	log.Printf("NewService source config before copy: UseSSL=%v", cfg.SourceMinio.UseSSL)
-	log.Printf("NewService source config after copy: UseSSL=%v", sourceCfg.UseSSL)
-
-	sourceClient, err := minio.NewMinioClient(sourceCfg)
+	sourceClient, err := minio.NewMinioClient(cfg.SourceMinio)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create source minio client: %w", err)
 	}
@@ -50,20 +37,7 @@ func NewService(cfg config.ProjectConfig) (*Service, error) {
 
 	switch cfg.DestType {
 	case config.DestinationMinio:
-		// Make a deep copy of the dest config
-		destCfg := config.MinioConfig{
-			Endpoint:        cfg.DestMinio.Endpoint,
-			AccessKeyID:     cfg.DestMinio.AccessKeyID,
-			SecretAccessKey: cfg.DestMinio.SecretAccessKey,
-			UseSSL:         cfg.DestMinio.UseSSL,
-			BucketName:     cfg.DestMinio.BucketName,
-		}
-
-		// Debug: Print dest config before and after copy
-		log.Printf("NewService dest config before copy: UseSSL=%v", cfg.DestMinio.UseSSL)
-		log.Printf("NewService dest config after copy: UseSSL=%v", destCfg.UseSSL)
-
-		destClient, err = minio.NewMinioClient(destCfg)
+		destClient, err = minio.NewMinioClient(cfg.DestMinio)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create destination minio client: %w", err)
 		}
@@ -96,19 +70,33 @@ func NewService(cfg config.ProjectConfig) (*Service, error) {
 }
 
 func (s *Service) Close() error {
-	return s.database.Close()
+	if s.database != nil {
+		return s.database.Close()
+	}
+	return nil
 }
 
 func (s *Service) UpdateSourceFileList(ctx context.Context) error {
-	filesChan, errorsChan := s.sourceClient.ListFiles(ctx)
+	// Get list of files from source
+	filesChan, errorChan := s.sourceClient.ListFiles(ctx)
 
+	// Process files
 	for {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-errorChan:
+			if err != nil {
+				return fmt.Errorf("error listing files: %w", err)
+			}
+			return nil
 		case file, ok := <-filesChan:
 			if !ok {
-				return nil
+				// Channel closed, wait for error channel
+				continue
 			}
 
+			// Add or update file in database
 			existingFile, err := s.database.GetFileByPath(s.projectName, file.Path)
 			if err != nil {
 				return fmt.Errorf("failed to check existing file: %w", err)
@@ -133,70 +121,73 @@ func (s *Service) UpdateSourceFileList(ctx context.Context) error {
 					return fmt.Errorf("failed to update file status: %w", err)
 				}
 			}
-
-		case err := <-errorsChan:
-			if err != nil {
-				return fmt.Errorf("error listing files: %w", err)
-			}
-			return nil
-
-		case <-ctx.Done():
-			return ctx.Err()
 		}
 	}
 }
 
 func (s *Service) SyncFiles(ctx context.Context, workers int) error {
-	var wg sync.WaitGroup
-	errorsChan := make(chan error, workers)
+	// Get list of pending files
+	files, err := s.database.GetPendingFiles(s.projectName, 0) // 0 means get all pending files
+	if err != nil {
+		return fmt.Errorf("failed to get pending files: %w", err)
+	}
 
-	// Start worker goroutines
+	// No files to sync
+	if len(files) == 0 {
+		return nil
+	}
+
+	// Create error channel
+	errorChan := make(chan error, workers)
+
+	// Create worker pool
+	var wg sync.WaitGroup
+	filesChan := make(chan *db.FileEntry)
+
+	// Start workers
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for {
-				// Get pending files in batches
-				files, err := s.database.GetPendingFiles(s.projectName, 10)
-				if err != nil {
-					errorsChan <- fmt.Errorf("failed to get pending files: %w", err)
-					return
-				}
-
-				if len(files) == 0 {
-					return
-				}
-
-				for _, file := range files {
+			for file := range filesChan {
+				if err := s.syncFile(ctx, file); err != nil {
+					// Update file status with error
+					if dbErr := s.database.UpdateFileStatus(file.ID, db.StatusError, err.Error()); dbErr != nil {
+						log.Printf("Failed to update file status: %v", dbErr)
+					}
 					select {
-					case <-ctx.Done():
-						return
+					case errorChan <- fmt.Errorf("failed to sync file %s: %w", file.Path, err):
 					default:
-						if err := s.syncFile(ctx, file); err != nil {
-							log.Printf("Error syncing file %s: %v", file.Path, err)
-							if err := s.database.UpdateFileStatus(file.ID, db.StatusError, err.Error()); err != nil {
-								errorsChan <- fmt.Errorf("failed to update file status: %w", err)
-								return
-							}
-						}
+						// Error channel is full, log error
+						log.Printf("Failed to sync file %s: %v", file.Path, err)
 					}
 				}
 			}
 		}()
 	}
 
-	// Wait for all workers to finish
-	wg.Wait()
-	close(errorsChan)
-
-	// Check for any errors
-	for err := range errorsChan {
-		if err != nil {
-			return err
+	// Send files to workers
+	go func() {
+		for _, file := range files {
+			select {
+			case <-ctx.Done():
+				return
+			case filesChan <- file:
+			}
 		}
-	}
+		close(filesChan)
+	}()
 
-	return nil
+	// Wait for workers to finish
+	wg.Wait()
+
+	// Check for errors
+	select {
+	case err := <-errorChan:
+		return err
+	default:
+		return nil
+	}
 }
 
 func (s *Service) syncFile(ctx context.Context, file *db.FileEntry) error {
@@ -232,17 +223,12 @@ func (s *Service) syncFile(ctx context.Context, file *db.FileEntry) error {
 	}
 	defer object.Close()
 
-	objectInfo, err := object.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to get object info: %w", err)
-	}
-
 	// Copy file based on destination type
 	switch s.destType {
 	case config.DestinationMinio:
 		err = s.sourceClient.CopyFile(ctx, s.destClient, file.Path)
 	case config.DestinationLocal:
-		err = s.localDest.WriteFile(ctx, file.Path, object, objectInfo.Size)
+		err = s.localDest.SaveFile(ctx, file.Path, object)
 	}
 
 	if err != nil {

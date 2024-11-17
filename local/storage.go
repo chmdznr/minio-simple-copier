@@ -6,14 +6,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/chmdznr/minio-simple-copier/v2/config"
 )
 
 type Storage struct {
 	basePath string
-	mu       sync.Mutex
 }
 
 func NewStorage(cfg config.LocalConfig) (*Storage, error) {
@@ -27,53 +25,25 @@ func NewStorage(cfg config.LocalConfig) (*Storage, error) {
 	}, nil
 }
 
-func (s *Storage) ensureDir(path string) error {
-	dir := filepath.Dir(path)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return os.MkdirAll(dir, 0755)
-}
+func (s *Storage) SaveFile(ctx context.Context, sourcePath string, reader io.Reader) error {
+	// Preserve folder structure from source path
+	destPath := filepath.Join(s.basePath, sourcePath)
 
-func (s *Storage) WriteFile(ctx context.Context, objectPath string, reader io.Reader, size int64) error {
-	fullPath := filepath.Join(s.basePath, filepath.FromSlash(objectPath))
-
-	// Ensure directory exists
-	if err := s.ensureDir(fullPath); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+	// Create parent directories if they don't exist
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return fmt.Errorf("failed to create directories: %w", err)
 	}
 
-	// Create temporary file
-	tmpPath := fullPath + ".tmp"
-	f, err := os.Create(tmpPath)
+	// Create destination file
+	file, err := os.Create(destPath)
 	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
+		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer func() {
-		f.Close()
-		if err != nil {
-			os.Remove(tmpPath)
-		}
-	}()
+	defer file.Close()
 
-	// Copy data
-	_, err = io.Copy(f, reader)
-	if err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
-	}
-
-	// Sync to disk
-	if err := f.Sync(); err != nil {
-		return fmt.Errorf("failed to sync file: %w", err)
-	}
-
-	// Close file before renaming
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("failed to close file: %w", err)
-	}
-
-	// Rename temporary file to final name
-	if err := os.Rename(tmpPath, fullPath); err != nil {
-		return fmt.Errorf("failed to rename file: %w", err)
+	// Copy data from reader to file
+	if _, err := io.Copy(file, reader); err != nil {
+		return fmt.Errorf("failed to copy data: %w", err)
 	}
 
 	return nil
