@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -33,9 +32,6 @@ func LoadConfig(projectsDir string) (*FileConfig, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Debug: Print raw YAML
-	log.Printf("Raw YAML:\n%s", string(data))
-
 	var config FileConfig
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
@@ -44,17 +40,6 @@ func LoadConfig(projectsDir string) (*FileConfig, error) {
 	if config.Projects == nil {
 		config.Projects = make(map[string]ProjectMinioConfig)
 	}
-
-	// Debug: Print loaded config with explicit UseSSL values
-	for name, proj := range config.Projects {
-		log.Printf("Project %s source UseSSL: %v", name, proj.Source.UseSSL)
-		if proj.Dest != nil {
-			log.Printf("Project %s dest UseSSL: %v", name, proj.Dest.UseSSL)
-		}
-	}
-
-	// Debug: Print loaded config
-	log.Printf("Loaded config: %+v", config)
 
 	return &config, nil
 }
@@ -83,9 +68,6 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 		return ProjectConfig{}, false
 	}
 
-	// Debug: Print project config with explicit UseSSL value
-	log.Printf("GetProjectConfig source UseSSL before copy: %v", minioConfig.Source.UseSSL)
-
 	// Make deep copies of all structs
 	config := ProjectConfig{
 		ProjectName: projectName,
@@ -99,9 +81,6 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 		DestType:     minioConfig.DestType,
 		DatabasePath: filepath.Join("projects", projectName, "files.db"),
 	}
-
-	// Debug: Print source UseSSL after copy
-	log.Printf("GetProjectConfig source UseSSL after copy: %v", config.SourceMinio.UseSSL)
 
 	switch minioConfig.DestType {
 	case DestinationMinio:
@@ -121,9 +100,6 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 			}
 		}
 	}
-
-	// Debug: Print final config
-	log.Printf("Final config for %s: %+v", projectName, config)
 
 	return config, true
 }

@@ -202,9 +202,6 @@ func main() {
 	cfg := projectConfig
 	cfg.DatabasePath = filepath.Join(projectDir, "files.db")
 
-	// Debug: Print config before overrides
-	log.Printf("Config before overrides: UseSSL=%v", cfg.SourceMinio.UseSSL)
-
 	// Override with command line values if provided
 	if *sourceEndpoint != "" {
 		cfg.SourceMinio.Endpoint = *sourceEndpoint
@@ -228,9 +225,6 @@ func main() {
 	if sourceUseSSLSet {
 		cfg.SourceMinio.UseSSL = *sourceUseSSL
 	}
-
-	// Debug: Print config after overrides
-	log.Printf("Config after overrides: UseSSL=%v", cfg.SourceMinio.UseSSL)
 
 	// Handle destination overrides based on type
 	if *destType != "minio" && *destType != "local" {
