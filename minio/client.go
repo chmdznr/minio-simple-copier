@@ -17,6 +17,9 @@ type MinioClient struct {
 }
 
 func NewMinioClient(cfg config.MinioConfig) (*MinioClient, error) {
+	// Debug: Print input config
+	log.Printf("NewMinioClient input config: UseSSL=%v", cfg.UseSSL)
+
 	// Make a deep copy of the config
 	minioConfig := config.MinioConfig{
 		Endpoint:        cfg.Endpoint,
@@ -26,13 +29,21 @@ func NewMinioClient(cfg config.MinioConfig) (*MinioClient, error) {
 		BucketName:     cfg.BucketName,
 	}
 
-	// Debug: Print minio config
+	// Debug: Print copied config
+	log.Printf("NewMinioClient copied config: UseSSL=%v", minioConfig.UseSSL)
+
+	// Debug: Print minio config before client creation
 	log.Printf("Creating Minio client with config: %+v", minioConfig)
 
-	client, err := minio.New(minioConfig.Endpoint, &minio.Options{
+	opts := &minio.Options{
 		Creds:  credentials.NewStaticV4(minioConfig.AccessKeyID, minioConfig.SecretAccessKey, ""),
 		Secure: minioConfig.UseSSL,
-	})
+	}
+
+	// Debug: Print options
+	log.Printf("Minio client options: Secure=%v", opts.Secure)
+
+	client, err := minio.New(minioConfig.Endpoint, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create minio client: %w", err)
 	}
