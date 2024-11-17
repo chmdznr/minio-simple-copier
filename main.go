@@ -17,6 +17,49 @@ import (
 
 const projectsDir = "projects"
 
+func formatSize(size int64) string {
+	const unit = 1024
+	if size < unit {
+		return fmt.Sprintf("%d B", size)
+	}
+	div, exp := int64(unit), 0
+	for n := size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+func printStatus(status *sync.SyncStatus) {
+	fmt.Println("\nSync Status:")
+	fmt.Println("------------")
+	
+	var totalFiles, totalSize int64
+	for _, count := range status.Counts {
+		totalFiles += count.Count
+		totalSize += count.Size
+		fmt.Printf("%-10s: %5d files (%s)\n", 
+			count.Status, 
+			count.Count,
+			formatSize(count.Size),
+		)
+	}
+	
+	fmt.Printf("\nTotal: %d files (%s)\n", totalFiles, formatSize(totalSize))
+
+	if len(status.RecentErrors) > 0 {
+		fmt.Println("\nRecent Errors:")
+		fmt.Println("--------------")
+		for _, err := range status.RecentErrors {
+			fmt.Printf("File: %s\nError: %s\nTime: %s\n\n",
+				err.Path,
+				err.ErrorMessage,
+				err.UpdatedAt.Format(time.RFC3339),
+			)
+		}
+	}
+}
+
 func printUsage() {
 	fmt.Printf(`Minio Simple Copier - A tool for efficient file synchronization between Minio buckets or to local folders
 
@@ -219,51 +262,6 @@ func main() {
 		fmt.Println("\nReceived interrupt signal. Cleaning up...")
 		cancel()
 	}()
-
-	// Helper function to format size
-	func formatSize(size int64) string {
-		const unit = 1024
-		if size < unit {
-			return fmt.Sprintf("%d B", size)
-		}
-		div, exp := int64(unit), 0
-		for n := size / unit; n >= unit; n /= unit {
-			div *= unit
-			exp++
-		}
-		return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
-	}
-
-	// Helper function to print sync status
-	func printStatus(status *sync.SyncStatus) {
-		fmt.Println("\nSync Status:")
-		fmt.Println("------------")
-		
-		var totalFiles, totalSize int64
-		for _, count := range status.Counts {
-			totalFiles += count.Count
-			totalSize += count.Size
-			fmt.Printf("%-10s: %5d files (%s)\n", 
-				count.Status, 
-				count.Count,
-				formatSize(count.Size),
-			)
-		}
-		
-		fmt.Printf("\nTotal: %d files (%s)\n", totalFiles, formatSize(totalSize))
-
-		if len(status.RecentErrors) > 0 {
-			fmt.Println("\nRecent Errors:")
-			fmt.Println("--------------")
-			for _, err := range status.RecentErrors {
-				fmt.Printf("File: %s\nError: %s\nTime: %s\n\n",
-					err.Path,
-					err.ErrorMessage,
-					err.UpdatedAt.Format(time.RFC3339),
-				)
-			}
-		}
-	}
 
 	// Execute command
 	switch *command {
