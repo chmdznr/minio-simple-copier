@@ -61,11 +61,11 @@ func NewService(cfg config.ProjectConfig) (*Service, error) {
 
 	return &Service{
 		sourceClient: sourceClient,
-		destClient:  destClient,
-		localDest:   localDest,
-		destType:    cfg.DestType,
-		database:    database,
-		projectName: cfg.ProjectName,
+		destClient:   destClient,
+		localDest:    localDest,
+		destType:     cfg.DestType,
+		database:     database,
+		projectName:  cfg.ProjectName,
 	}, nil
 }
 
@@ -92,11 +92,11 @@ func (s *Service) UpdateSourceFileList(ctx context.Context) error {
 				// New file, insert it
 				entry := &db.FileEntry{
 					ProjectName:  s.projectName,
-					Path:        file.Path,
-					Size:        file.Size,
-					ETag:        file.ETag,
+					Path:         file.Path,
+					Size:         file.Size,
+					ETag:         file.ETag,
 					LastModified: file.LastModified,
-					Status:      db.StatusPending,
+					Status:       db.StatusPending,
 				}
 				if err := s.database.InsertFileEntry(entry); err != nil {
 					return fmt.Errorf("failed to insert file entry: %w", err)
