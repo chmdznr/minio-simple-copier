@@ -17,12 +17,15 @@ type MinioClient struct {
 }
 
 func NewMinioClient(cfg config.MinioConfig) (*MinioClient, error) {
-	// Debug: Print minio config
-	log.Printf("Creating Minio client with config: %+v", cfg)
+	// Make a copy of the config to prevent modifications
+	minioConfig := cfg
 
-	client, err := minio.New(cfg.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
-		Secure: cfg.UseSSL,
+	// Debug: Print minio config
+	log.Printf("Creating Minio client with config: %+v", minioConfig)
+
+	client, err := minio.New(minioConfig.Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(minioConfig.AccessKeyID, minioConfig.SecretAccessKey, ""),
+		Secure: minioConfig.UseSSL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create minio client: %w", err)
@@ -30,7 +33,7 @@ func NewMinioClient(cfg config.MinioConfig) (*MinioClient, error) {
 
 	return &MinioClient{
 		client:     client,
-		bucketName: cfg.BucketName,
+		bucketName: minioConfig.BucketName,
 	}, nil
 }
 
