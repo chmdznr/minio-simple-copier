@@ -15,9 +15,9 @@ A high-performance CLI tool for synchronizing files between Minio buckets, optim
 
 ## Installation
 
-### Option 1: Using go get
+### Option 1: Using go install
 ```bash
-go get github.com/chmdznr/minio-simple-copier
+go install github.com/chmdznr/minio-simple-copier@latest
 ```
 
 ### Option 2: Building from Source

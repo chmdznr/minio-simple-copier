@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"minio-simple-copier/config"
-	"minio-simple-copier/sync"
+	"github.com/chmdznr/minio-simple-copier/config"
+	"github.com/chmdznr/minio-simple-copier/sync"
 )
 
 const projectsDir = "projects"
