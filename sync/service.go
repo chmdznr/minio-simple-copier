@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/chmdznr/minio-simple-copier/v2/config"
 	"github.com/chmdznr/minio-simple-copier/v2/db"
@@ -77,18 +78,6 @@ func (s *Service) Close() error {
 }
 
 func (s *Service) UpdateSourceFileList(ctx context.Context) error {
-	// Start transaction
-	tx, err := s.database.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Reset all files to pending
-	if err := tx.ResetAllFiles(s.projectName); err != nil {
-		return fmt.Errorf("failed to reset files: %w", err)
-	}
-
 	// Get list of files from source
 	filesChan, errorChan := s.sourceClient.ListFiles(ctx)
 
@@ -101,19 +90,37 @@ func (s *Service) UpdateSourceFileList(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("error listing files: %w", err)
 			}
-			// Channel closed without error, we're done
-			if err := tx.Commit(); err != nil {
-				return fmt.Errorf("failed to commit transaction: %w", err)
-			}
 			return nil
 		case file, ok := <-filesChan:
 			if !ok {
 				// Channel closed, wait for error channel
 				continue
 			}
+
 			// Add or update file in database
-			if err := tx.UpsertFile(s.projectName, file.Path, file.Size, file.ETag, file.LastModified); err != nil {
-				return fmt.Errorf("failed to upsert file: %w", err)
+			existingFile, err := s.database.GetFileByPath(s.projectName, file.Path)
+			if err != nil {
+				return fmt.Errorf("failed to check existing file: %w", err)
+			}
+
+			if existingFile == nil {
+				// New file, insert it
+				entry := &db.FileEntry{
+					ProjectName:  s.projectName,
+					Path:         file.Path,
+					Size:         file.Size,
+					ETag:         file.ETag,
+					LastModified: file.LastModified,
+					Status:       db.StatusPending,
+				}
+				if err := s.database.InsertFileEntry(entry); err != nil {
+					return fmt.Errorf("failed to insert file entry: %w", err)
+				}
+			} else if existingFile.ETag != file.ETag {
+				// File changed, update status to pending
+				if err := s.database.UpdateFileStatus(existingFile.ID, db.StatusPending, ""); err != nil {
+					return fmt.Errorf("failed to update file status: %w", err)
+				}
 			}
 		}
 	}
@@ -121,7 +128,7 @@ func (s *Service) UpdateSourceFileList(ctx context.Context) error {
 
 func (s *Service) SyncFiles(ctx context.Context, workers int) error {
 	// Get list of pending files
-	files, err := s.database.GetPendingFiles(s.projectName)
+	files, err := s.database.GetPendingFiles(s.projectName, 0) // 0 means get all pending files
 	if err != nil {
 		return fmt.Errorf("failed to get pending files: %w", err)
 	}
