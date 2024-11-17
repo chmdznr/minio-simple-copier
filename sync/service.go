@@ -27,6 +27,9 @@ type SyncStatus struct {
 }
 
 func NewService(cfg config.ProjectConfig) (*Service, error) {
+	// Debug: Print source config
+	log.Printf("NewService source config: UseSSL=%v", cfg.SourceMinio.UseSSL)
+
 	sourceClient, err := minio.NewMinioClient(cfg.SourceMinio)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create source minio client: %w", err)
@@ -37,6 +40,9 @@ func NewService(cfg config.ProjectConfig) (*Service, error) {
 
 	switch cfg.DestType {
 	case config.DestinationMinio:
+		// Debug: Print dest config
+		log.Printf("NewService dest config: UseSSL=%v", cfg.DestMinio.UseSSL)
+
 		destClient, err = minio.NewMinioClient(cfg.DestMinio)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create destination minio client: %w", err)
