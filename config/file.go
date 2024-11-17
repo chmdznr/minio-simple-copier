@@ -77,6 +77,7 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 			SecretAccessKey: minioConfig.Source.SecretAccessKey,
 			UseSSL:         minioConfig.Source.UseSSL,
 			BucketName:     minioConfig.Source.BucketName,
+			FolderPath:     minioConfig.Source.FolderPath,
 		},
 		DestType:     minioConfig.DestType,
 		DatabasePath: filepath.Join("projects", projectName, "files.db"),
@@ -91,6 +92,7 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 				SecretAccessKey: minioConfig.Dest.SecretAccessKey,
 				UseSSL:         minioConfig.Dest.UseSSL,
 				BucketName:     minioConfig.Dest.BucketName,
+				FolderPath:     minioConfig.Dest.FolderPath,
 			}
 		}
 	case DestinationLocal:
@@ -112,6 +114,7 @@ func (c *FileConfig) SetProjectConfig(projectName string, config ProjectConfig) 
 			SecretAccessKey: config.SourceMinio.SecretAccessKey,
 			UseSSL:         config.SourceMinio.UseSSL,
 			BucketName:     config.SourceMinio.BucketName,
+			FolderPath:     config.SourceMinio.FolderPath,
 		},
 		DestType: config.DestType,
 	}
@@ -124,6 +127,7 @@ func (c *FileConfig) SetProjectConfig(projectName string, config ProjectConfig) 
 			SecretAccessKey: config.DestMinio.SecretAccessKey,
 			UseSSL:         config.DestMinio.UseSSL,
 			BucketName:     config.DestMinio.BucketName,
+			FolderPath:     config.DestMinio.FolderPath,
 		}
 	case DestinationLocal:
 		minioConfig.Local = &LocalConfig{
