@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"net/url"
-	"path"
 	"strings"
 	"time"
 
