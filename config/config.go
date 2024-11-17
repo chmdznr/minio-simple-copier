@@ -1,11 +1,11 @@
 package config
 
 type MinioConfig struct {
-	Endpoint        string
-	AccessKeyID     string
-	SecretAccessKey string
-	UseSSL         bool
-	BucketName     string
+	Endpoint        string `yaml:"endpoint"`
+	AccessKeyID     string `yaml:"accesskeyid"`
+	SecretAccessKey string `yaml:"secretaccesskey"`
+	UseSSL         bool   `yaml:"usessl"`
+	BucketName     string `yaml:"bucketname"`
 }
 
 type DestinationType string
@@ -16,14 +16,14 @@ const (
 )
 
 type LocalConfig struct {
-	Path string
+	Path string `yaml:"path"`
 }
 
 type ProjectConfig struct {
-	ProjectName    string
-	SourceMinio    MinioConfig
-	DestType       DestinationType
-	DestMinio      MinioConfig    // Used when DestType is DestinationMinio
-	DestLocal      LocalConfig    // Used when DestType is DestinationLocal
-	DatabasePath   string
+	ProjectName    string `yaml:"projectname"`
+	SourceMinio    MinioConfig `yaml:"sourceminio"`
+	DestType       DestinationType `yaml:"desttype"`
+	DestMinio      MinioConfig `yaml:"destminio"`
+	DestLocal      LocalConfig `yaml:"destlocal"`
+	DatabasePath   string `yaml:"databasepath"`
 }
