@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chmdznr/minio-simple-copier/config"
-	"github.com/chmdznr/minio-simple-copier/db"
-	"github.com/chmdznr/minio-simple-copier/local"
-	"github.com/chmdznr/minio-simple-copier/minio"
+	"github.com/chmdznr/minio-simple-copier/v2/config"
+	"github.com/chmdznr/minio-simple-copier/v2/db"
+	"github.com/chmdznr/minio-simple-copier/v2/local"
+	"github.com/chmdznr/minio-simple-copier/v2/minio"
 )
 
 type Service struct {

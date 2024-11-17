@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/chmdznr/minio-simple-copier/config"
+	"github.com/chmdznr/minio-simple-copier/v2/config"
 )
 
 type Storage struct {
