@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/chmdznr/minio-simple-copier/v2/config"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/chmdznr/minio-simple-copier/v2/config"
 )
 
 type MinioClient struct {
@@ -100,7 +100,7 @@ func (m *MinioClient) CopyFile(ctx context.Context, destClient *MinioClient, obj
 			objectInfo.Size,
 			minio.PutObjectOptions{
 				ContentType: objectInfo.ContentType,
-				PartSize:   64 * 1024 * 1024, // 64MB parts
+				PartSize:    64 * 1024 * 1024, // 64MB parts
 			},
 		)
 	} else {
