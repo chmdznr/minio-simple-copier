@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/chmdznr/minio-simple-copier/v2/config"
 	"github.com/chmdznr/minio-simple-copier/v2/db"
