@@ -1,0 +1,35 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+minio-simple-copier
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Project specific
+/projects/
+*.db
+*.db-journal
+
+# Dependency directories (remove these if you want to check in your vendor folder)
+/vendor/
+
+# Go workspace file
+go.work
+
+# OS specific
+.DS_Store
+Thumbs.db

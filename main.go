@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -61,38 +62,45 @@ func printStatus(status *sync.SyncStatus) {
 }
 
 func printUsage() {
-	fmt.Printf(`Minio Simple Copier - A tool for efficient file synchronization between Minio buckets or to local folders
+	fmt.Println(`Minio Simple Copier - A high-performance file synchronization tool
 
 Usage:
-  %s [flags] -project <name> -command <command>
+  minio-simple-copier -command <command> [options]
 
-Available Commands:
-  help        Show this help message
-  config      Save Minio connection details and destination settings for a project
-  update-list Scan source bucket and update local database with file information
-  sync        Copy files from source to destination (Minio or local folder)
-  status      Show current synchronization status and progress
+Commands:
+  help          Show this help message
+  config        Save configuration for a project
+  update-list   Update source file list
+  sync          Start file synchronization
+  status        Show current sync status
 
 Examples:
-  # Configure Minio-to-Minio sync
-  %s -project myproject -command config -dest-type minio \
-      -source-endpoint source-minio:9000 -source-bucket source-bucket \
-      -dest-endpoint dest-minio:9000 -dest-bucket dest-bucket
+  1. Configure Minio-to-Minio sync:
+     minio-simple-copier -project backup -command config \
+       -source-endpoint source:9000 -source-bucket bucket1 \
+       -dest-type minio -dest-endpoint dest:9000 -dest-bucket bucket2
 
-  # Configure Minio-to-Local sync
-  %s -project mybackup -command config -dest-type local \
-      -source-endpoint minio:9000 -source-bucket mybucket \
-      -local-path "D:/backup/minio-files"
+  2. Configure Minio-to-Local sync:
+     minio-simple-copier -project local-backup -command config \
+       -source-endpoint minio:9000 -source-bucket mybucket \
+       -dest-type local -local-path "/data/backup"
 
-  # Run synchronization
-  %s -project myproject -command sync -workers 10
+  3. Configure folder-specific sync:
+     minio-simple-copier -project folder-backup -command config \
+       -source-endpoint minio:9000 -source-bucket mybucket \
+       -source-folder "documents/2024" \
+       -dest-type local -local-path "/data/backup/2024-docs"
 
-  # Check status
-  %s -project myproject -command status
+  4. Update file list:
+     minio-simple-copier -project myproject -command update-list
 
-Flags:
-`, os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0])
-	flag.PrintDefaults()
+  5. Start sync with 10 workers:
+     minio-simple-copier -project myproject -command sync -workers 10
+
+  6. Check sync status:
+     minio-simple-copier -project myproject -command status
+
+For more information, visit: https://github.com/chmdznr/minio-simple-copier`)
 }
 
 func main() {
@@ -103,8 +111,7 @@ func main() {
 		sourceAccessKey = flag.String("source-access-key", "", "Source Minio access key")
 		sourceSecretKey = flag.String("source-secret-key", "", "Source Minio secret key")
 		sourceBucket    = flag.String("source-bucket", "", "Source Minio bucket")
-		sourceUseSSL    = flag.Bool("source-use-ssl", true, "Use SSL for source Minio")
-		sourceFolderPath = flag.String("source-folder", "", "Source folder path (e.g., naskah-keluar)")
+		sourceFolder    = flag.String("source-folder", "", "Source folder path (e.g., naskah-keluar)")
 
 		destType      = flag.String("dest-type", "minio", "Destination type (minio or local)")
 		localDestPath = flag.String("local-path", "", "Local destination path (when dest-type is local)")
@@ -114,13 +121,29 @@ func main() {
 		destSecretKey = flag.String("dest-secret-key", "", "Destination Minio secret key (when dest-type is minio)")
 		destBucket    = flag.String("dest-bucket", "", "Destination Minio bucket (when dest-type is minio)")
 		destUseSSL    = flag.Bool("dest-use-ssl", true, "Use SSL for destination Minio (when dest-type is minio)")
-		destFolderPath = flag.String("dest-folder", "", "Destination folder path (when dest-type is minio)")
+		destFolder    = flag.String("dest-folder", "", "Destination folder path (when dest-type is minio)")
 
 		workers = flag.Int("workers", 5, "Number of concurrent workers")
 		command = flag.String("command", "", "Command to execute (help, config, update-list, sync, status)")
 	)
 
+	// Handle SSL flag separately
+	var sourceUseSSL bool
+	flag.BoolVar(&sourceUseSSL, "source-use-ssl", true, "Use SSL for source Minio")
+
 	flag.Parse()
+
+	// Debug: Print all arguments
+	log.Println("Debug: Command line arguments:")
+	for i, arg := range os.Args {
+		log.Printf("Arg[%d]: %q", i, arg)
+	}
+
+	// Debug: Print all flags
+	log.Println("Debug: Printing all flags:")
+	flag.Visit(func(f *flag.Flag) {
+		log.Printf("Flag: %s = %q", f.Name, f.Value.String())
+	})
 
 	// Show help if no arguments or help command
 	if len(os.Args) == 1 || (len(os.Args) == 2 && (os.Args[1] == "-h" || os.Args[1] == "--help")) || *command == "help" {
@@ -150,9 +173,16 @@ func main() {
 
 	// Handle config command first
 	if *command == "config" {
-		destTypeEnum := config.DestinationType(*destType)
+		// Determine destination type
+		destTypeStr := strings.ToLower(*destType)
+		log.Printf("Debug: Raw dest-type flag value: %q", *destType)
+		log.Printf("Debug: Lowercased dest-type value: %q", destTypeStr)
+		
+		destTypeEnum := config.DestinationType(destTypeStr)
+		log.Printf("Debug: destTypeEnum after conversion: %q", destTypeEnum)
+		
 		if destTypeEnum != config.DestinationMinio && destTypeEnum != config.DestinationLocal {
-			log.Fatalf("Invalid destination type: %s. Must be 'minio' or 'local'", *destType)
+			log.Fatalf("Invalid destination type: %s. Must be 'minio' or 'local'", destTypeStr)
 		}
 
 		// Save new config
@@ -162,13 +192,15 @@ func main() {
 				Endpoint:        *sourceEndpoint,
 				AccessKeyID:     *sourceAccessKey,
 				SecretAccessKey: *sourceSecretKey,
-				UseSSL:         *sourceUseSSL,
+				UseSSL:         sourceUseSSL,
 				BucketName:     *sourceBucket,
-				FolderPath:     *sourceFolderPath,
+				FolderPath:     *sourceFolder,
 			},
 			DestType: destTypeEnum,
 		}
 
+		// Handle destination based on type
+		log.Printf("Debug: handling destination for type: %q", destTypeEnum)
 		switch destTypeEnum {
 		case config.DestinationMinio:
 			minioConfig.DestMinio = config.MinioConfig{
@@ -177,7 +209,7 @@ func main() {
 				SecretAccessKey: *destSecretKey,
 				UseSSL:         *destUseSSL,
 				BucketName:     *destBucket,
-				FolderPath:     *destFolderPath,
+				FolderPath:     *destFolder,
 			}
 		case config.DestinationLocal:
 			if *localDestPath == "" {
@@ -186,8 +218,10 @@ func main() {
 			minioConfig.DestLocal = config.LocalConfig{
 				Path: *localDestPath,
 			}
+			minioConfig.DestMinio = config.MinioConfig{} // Empty Minio config for local destination
 		}
 
+		log.Printf("Debug: final config before save: %+v", minioConfig)
 		fileConfig.SetProjectConfig(*projectName, minioConfig)
 		if err := config.SaveConfig(projectsDir, fileConfig); err != nil {
 			log.Fatalf("Failed to save config: %v", err)
@@ -219,8 +253,8 @@ func main() {
 	if *sourceBucket != "" {
 		cfg.SourceMinio.BucketName = *sourceBucket
 	}
-	if *sourceFolderPath != "" {
-		cfg.SourceMinio.FolderPath = *sourceFolderPath
+	if *sourceFolder != "" {
+		cfg.SourceMinio.FolderPath = *sourceFolder
 	}
 	// Only override UseSSL if the flag was explicitly set
 	sourceUseSSLSet := false
@@ -230,7 +264,7 @@ func main() {
 		}
 	})
 	if sourceUseSSLSet {
-		cfg.SourceMinio.UseSSL = *sourceUseSSL
+		cfg.SourceMinio.UseSSL = sourceUseSSL
 	}
 
 	// Handle destination overrides based on type
@@ -252,8 +286,8 @@ func main() {
 		if *destBucket != "" {
 			cfg.DestMinio.BucketName = *destBucket
 		}
-		if *destFolderPath != "" {
-			cfg.DestMinio.FolderPath = *destFolderPath
+		if *destFolder != "" {
+			cfg.DestMinio.FolderPath = *destFolder
 		}
 		// Only override UseSSL if the flag was explicitly set
 		destUseSSLSet := false
