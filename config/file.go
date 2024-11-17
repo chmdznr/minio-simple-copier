@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -41,6 +42,9 @@ func LoadConfig(projectsDir string) (*FileConfig, error) {
 		config.Projects = make(map[string]ProjectMinioConfig)
 	}
 
+	// Debug: Print loaded config
+	log.Printf("Loaded config: %+v", config)
+
 	return &config, nil
 }
 
@@ -68,6 +72,9 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 		return ProjectConfig{}, false
 	}
 
+	// Debug: Print project config
+	log.Printf("Project config for %s: %+v", projectName, minioConfig)
+
 	config := ProjectConfig{
 		ProjectName: projectName,
 		SourceMinio: minioConfig.Source,
@@ -84,6 +91,9 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 			config.DestLocal = *minioConfig.Local
 		}
 	}
+
+	// Debug: Print final config
+	log.Printf("Final config for %s: %+v", projectName, config)
 
 	return config, true
 }
