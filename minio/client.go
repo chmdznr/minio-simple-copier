@@ -9,7 +9,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"minio-simple-copier/config"
+	"github.com/chmdznr/minio-simple-copier/config"
 )
 
 type MinioClient struct {
