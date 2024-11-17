@@ -3,6 +3,7 @@ package minio
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -16,6 +17,9 @@ type MinioClient struct {
 }
 
 func NewMinioClient(cfg config.MinioConfig) (*MinioClient, error) {
+	// Debug: Print minio config
+	log.Printf("Creating Minio client with config: %+v", cfg)
+
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
 		Secure: cfg.UseSSL,
