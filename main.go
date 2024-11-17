@@ -104,6 +104,7 @@ func main() {
 		sourceSecretKey = flag.String("source-secret-key", "", "Source Minio secret key")
 		sourceBucket    = flag.String("source-bucket", "", "Source Minio bucket")
 		sourceUseSSL    = flag.Bool("source-use-ssl", true, "Use SSL for source Minio")
+		sourceFolderPath = flag.String("source-folder", "", "Source folder path (e.g., naskah-keluar)")
 
 		destType      = flag.String("dest-type", "minio", "Destination type (minio or local)")
 		localDestPath = flag.String("local-path", "", "Local destination path (when dest-type is local)")
@@ -113,6 +114,7 @@ func main() {
 		destSecretKey = flag.String("dest-secret-key", "", "Destination Minio secret key (when dest-type is minio)")
 		destBucket    = flag.String("dest-bucket", "", "Destination Minio bucket (when dest-type is minio)")
 		destUseSSL    = flag.Bool("dest-use-ssl", true, "Use SSL for destination Minio (when dest-type is minio)")
+		destFolderPath = flag.String("dest-folder", "", "Destination folder path (when dest-type is minio)")
 
 		workers = flag.Int("workers", 5, "Number of concurrent workers")
 		command = flag.String("command", "", "Command to execute (help, config, update-list, sync, status)")
@@ -162,6 +164,7 @@ func main() {
 				SecretAccessKey: *sourceSecretKey,
 				UseSSL:         *sourceUseSSL,
 				BucketName:     *sourceBucket,
+				FolderPath:     *sourceFolderPath,
 			},
 			DestType: destTypeEnum,
 		}
@@ -174,6 +177,7 @@ func main() {
 				SecretAccessKey: *destSecretKey,
 				UseSSL:         *destUseSSL,
 				BucketName:     *destBucket,
+				FolderPath:     *destFolderPath,
 			}
 		case config.DestinationLocal:
 			if *localDestPath == "" {
@@ -215,6 +219,9 @@ func main() {
 	if *sourceBucket != "" {
 		cfg.SourceMinio.BucketName = *sourceBucket
 	}
+	if *sourceFolderPath != "" {
+		cfg.SourceMinio.FolderPath = *sourceFolderPath
+	}
 	// Only override UseSSL if the flag was explicitly set
 	sourceUseSSLSet := false
 	flag.Visit(func(f *flag.Flag) {
@@ -244,6 +251,9 @@ func main() {
 		}
 		if *destBucket != "" {
 			cfg.DestMinio.BucketName = *destBucket
+		}
+		if *destFolderPath != "" {
+			cfg.DestMinio.FolderPath = *destFolderPath
 		}
 		// Only override UseSSL if the flag was explicitly set
 		destUseSSLSet := false

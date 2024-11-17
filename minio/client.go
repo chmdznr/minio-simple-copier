@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -21,16 +23,17 @@ const (
 type MinioClient struct {
 	client     *minio.Client
 	bucketName string
+	folderPath string
 }
 
 func NewMinioClient(cfg config.MinioConfig) (*MinioClient, error) {
-	// Make a deep copy of the config
 	minioConfig := config.MinioConfig{
 		Endpoint:        cfg.Endpoint,
 		AccessKeyID:     cfg.AccessKeyID,
 		SecretAccessKey: cfg.SecretAccessKey,
 		UseSSL:         cfg.UseSSL,
 		BucketName:     cfg.BucketName,
+		FolderPath:     strings.TrimRight(cfg.FolderPath, "/"),
 	}
 
 	client, err := minio.New(minioConfig.Endpoint, &minio.Options{
@@ -44,6 +47,7 @@ func NewMinioClient(cfg config.MinioConfig) (*MinioClient, error) {
 	return &MinioClient{
 		client:     client,
 		bucketName: minioConfig.BucketName,
+		folderPath: minioConfig.FolderPath,
 	}, nil
 }
 
@@ -52,12 +56,10 @@ func isRetryableError(err error) bool {
 		return false
 	}
 
-	// Check for timeout errors
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		return true
 	}
 
-	// Check for HTTP timeouts and connection errors
 	if urlErr, ok := err.(*url.Error); ok {
 		if netErr, ok := urlErr.Err.(net.Error); ok && netErr.Timeout() {
 			return true
@@ -67,7 +69,6 @@ func isRetryableError(err error) bool {
 		}
 	}
 
-	// Check for specific HTTP errors
 	if httpErr, ok := err.(*url.Error); ok {
 		if httpErr.Err == context.DeadlineExceeded {
 			return true
@@ -88,11 +89,11 @@ func (m *MinioClient) withRetry(operation string, fn func() error) error {
 		if err := fn(); err != nil {
 			lastErr = err
 			if !isRetryableError(err) {
-				return err // Don't retry if error is not retryable
+				return err
 			}
 			continue
 		}
-		return nil // Success
+		return nil
 	}
 	return fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
 }
@@ -113,13 +114,23 @@ func (m *MinioClient) ListFiles(ctx context.Context) (<-chan FileInfo, <-chan er
 		defer close(errorChan)
 
 		err := m.withRetry("ListObjects", func() error {
-			objectCh := m.client.ListObjects(ctx, m.bucketName, minio.ListObjectsOptions{
+			opts := minio.ListObjectsOptions{
 				Recursive: true,
-			})
+			}
+
+			if m.folderPath != "" {
+				opts.Prefix = m.folderPath + "/"
+			}
+
+			objectCh := m.client.ListObjects(ctx, m.bucketName, opts)
 
 			for object := range objectCh {
 				if object.Err != nil {
 					return fmt.Errorf("error listing objects: %w", object.Err)
+				}
+
+				if strings.HasSuffix(object.Key, "/") {
+					continue
 				}
 
 				select {
@@ -146,22 +157,23 @@ func (m *MinioClient) ListFiles(ctx context.Context) (<-chan FileInfo, <-chan er
 
 func (m *MinioClient) CopyFile(ctx context.Context, destClient *MinioClient, objectPath string) error {
 	return m.withRetry("CopyFile", func() error {
-		// Get source object
 		object, err := m.GetObject(ctx, objectPath)
 		if err != nil {
 			return fmt.Errorf("failed to get source object: %w", err)
 		}
 		defer object.Close()
 
-		// Get object info
 		objectInfo, err := m.StatObject(ctx, objectPath)
 		if err != nil {
 			return fmt.Errorf("failed to get object info: %w", err)
 		}
 
 		destPath := objectPath
-		if objectInfo.Size > 64*1024*1024 { // 64MB
-			// For large files, use multipart copy
+		if destClient.folderPath != "" && m.folderPath != "" {
+			destPath = strings.Replace(objectPath, m.folderPath, destClient.folderPath, 1)
+		}
+
+		if objectInfo.Size > 64*1024*1024 {
 			_, err = destClient.client.ComposeObject(
 				ctx,
 				minio.CopyDestOptions{
@@ -174,7 +186,6 @@ func (m *MinioClient) CopyFile(ctx context.Context, destClient *MinioClient, obj
 				},
 			)
 		} else {
-			// For smaller files, use regular upload
 			_, err = destClient.client.PutObject(
 				ctx,
 				destClient.bucketName,

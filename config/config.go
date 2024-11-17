@@ -6,6 +6,7 @@ type MinioConfig struct {
 	SecretAccessKey string `yaml:"secretaccesskey"`
 	UseSSL          bool   `yaml:"usessl"`
 	BucketName      string `yaml:"bucketname"`
+	FolderPath      string `yaml:"folderpath"`  // e.g., "naskah-keluar/"
 }
 
 type DestinationType string
