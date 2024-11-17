@@ -17,6 +17,41 @@ import (
 
 const projectsDir = "projects"
 
+func printUsage() {
+	fmt.Printf(`Minio Simple Copier - A tool for efficient file synchronization between Minio buckets or to local folders
+
+Usage:
+  %s [flags] -project <name> -command <command>
+
+Available Commands:
+  help        Show this help message
+  config      Save Minio connection details and destination settings for a project
+  update-list Scan source bucket and update local database with file information
+  sync        Copy files from source to destination (Minio or local folder)
+  status      Show current synchronization status and progress
+
+Examples:
+  # Configure Minio-to-Minio sync
+  %s -project myproject -command config -dest-type minio \
+      -source-endpoint source-minio:9000 -source-bucket source-bucket \
+      -dest-endpoint dest-minio:9000 -dest-bucket dest-bucket
+
+  # Configure Minio-to-Local sync
+  %s -project mybackup -command config -dest-type local \
+      -source-endpoint minio:9000 -source-bucket mybucket \
+      -local-path "D:/backup/minio-files"
+
+  # Run synchronization
+  %s -project myproject -command sync -workers 10
+
+  # Check status
+  %s -project myproject -command status
+
+Flags:
+`, os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0])
+	flag.PrintDefaults()
+}
+
 func main() {
 	// Command line flags
 	var (
@@ -37,10 +72,16 @@ func main() {
 		destUseSSL    = flag.Bool("dest-use-ssl", true, "Use SSL for destination Minio (when dest-type is minio)")
 
 		workers = flag.Int("workers", 5, "Number of concurrent workers")
-		command = flag.String("command", "", "Command to execute (update-list, sync, status, config)")
+		command = flag.String("command", "", "Command to execute (help, config, update-list, sync, status)")
 	)
 
 	flag.Parse()
+
+	// Show help if no arguments or help command
+	if len(os.Args) == 1 || (len(os.Args) == 2 && (os.Args[1] == "-h" || os.Args[1] == "--help")) || *command == "help" {
+		printUsage()
+		return
+	}
 
 	if *projectName == "" {
 		log.Fatal("Project name is required")

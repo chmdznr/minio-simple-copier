@@ -65,12 +65,24 @@ The compiled binary will be available in the current directory. Make sure it's i
 
 ## Usage
 
-The tool provides four main commands:
+The tool provides five main commands:
 
-1. `config`: Save Minio connection details and destination settings for a project
-2. `update-list`: Scan the source Minio bucket and update the local SQLite database with file information
-3. `sync`: Copy files from source to destination (either Minio bucket or local folder)
-4. `status`: Show current synchronization status, including file counts, sizes, and recent errors
+1. `help`: Display usage information and examples
+2. `config`: Save Minio connection details and destination settings for a project
+3. `update-list`: Scan the source Minio bucket and update the local SQLite database with file information
+4. `sync`: Copy files from source to destination (either Minio bucket or local folder)
+5. `status`: Show current synchronization status, including file counts, sizes, and recent errors
+
+### Getting Started
+
+To see all available options and examples:
+```bash
+# Show help message
+minio-simple-copier -command help
+
+# Or use -h/--help flag
+minio-simple-copier -h
+```
 
 ### Basic Usage
 
@@ -164,7 +176,7 @@ projects:
   -project string
         Project name (required)
   -command string
-        Command to execute (config, update-list, sync, status)
+        Command to execute (config, update-list, sync, status, help)
   -workers int
         Number of concurrent workers (default 5)
 
