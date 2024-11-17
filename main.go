@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/chmdznr/minio-simple-copier/v2/config"
@@ -34,18 +32,18 @@ func formatSize(size int64) string {
 func printStatus(status *sync.SyncStatus) {
 	fmt.Println("\nSync Status:")
 	fmt.Println("------------")
-	
+
 	var totalFiles, totalSize int64
 	for _, count := range status.Counts {
 		totalFiles += count.Count
 		totalSize += count.Size
-		fmt.Printf("%-10s: %5d files (%s)\n", 
-			count.Status, 
+		fmt.Printf("%-10s: %5d files (%s)\n",
+			count.Status,
 			count.Count,
 			formatSize(count.Size),
 		)
 	}
-	
+
 	fmt.Printf("\nTotal: %d files (%s)\n", totalFiles, formatSize(totalSize))
 
 	if len(status.RecentErrors) > 0 {
@@ -128,7 +126,7 @@ func main() {
 		destFolder    = flag.String("dest-folder", "", "Destination folder path (when dest-type is minio)")
 
 		workers = flag.Int("workers", 5, "Number of concurrent workers")
-		command = flag.String("command", "", "Command to execute (help, config, update-list, sync, status, import-list)")
+		command = flag.String("command", "", "Command to execute (help, config, update-list, sync, status)")
 
 		// New flag for importing file list
 		importFile = flag.String("import-list", "", "Import file list from mc ls --recursive --json output")
@@ -182,54 +180,50 @@ func main() {
 	if *command == "config" {
 		// Determine destination type
 		destTypeStr := strings.ToLower(*destType)
-		log.Printf("Debug: Raw dest-type flag value: %q", *destType)
-		log.Printf("Debug: Lowercased dest-type value: %q", destTypeStr)
-		
+		if destTypeStr == "" {
+			destTypeStr = "minio" // Default to minio if not specified
+		}
+		log.Printf("Debug: dest-type flag value: %q", destTypeStr)
+
 		destTypeEnum := config.DestinationType(destTypeStr)
 		log.Printf("Debug: destTypeEnum after conversion: %q", destTypeEnum)
-		
+
 		if destTypeEnum != config.DestinationMinio && destTypeEnum != config.DestinationLocal {
 			log.Fatalf("Invalid destination type: %s. Must be 'minio' or 'local'", destTypeStr)
 		}
 
 		// Save new config
-		minioConfig := config.ProjectConfig{
+		cfg := &config.ProjectConfig{
 			ProjectName: *projectName,
 			SourceMinio: config.MinioConfig{
 				Endpoint:        *sourceEndpoint,
 				AccessKeyID:     *sourceAccessKey,
 				SecretAccessKey: *sourceSecretKey,
-				UseSSL:         sourceUseSSL,
-				BucketName:     *sourceBucket,
-				FolderPath:     *sourceFolder,
+				UseSSL:          sourceUseSSL,
+				BucketName:      *sourceBucket,
+				FolderPath:      *sourceFolder,
 			},
 			DestType: destTypeEnum,
 		}
 
 		// Handle destination based on type
-		log.Printf("Debug: handling destination for type: %q", destTypeEnum)
 		switch destTypeEnum {
 		case config.DestinationMinio:
-			minioConfig.DestMinio = config.MinioConfig{
+			cfg.DestMinio = config.MinioConfig{
 				Endpoint:        *destEndpoint,
 				AccessKeyID:     *destAccessKey,
 				SecretAccessKey: *destSecretKey,
-				UseSSL:         *destUseSSL,
-				BucketName:     *destBucket,
-				FolderPath:     *destFolder,
+				UseSSL:          *destUseSSL,
+				BucketName:      *destBucket,
+				FolderPath:      *destFolder,
 			}
 		case config.DestinationLocal:
-			if *localDestPath == "" {
-				log.Fatal("Local destination path is required when dest-type is local")
-			}
-			minioConfig.DestLocal = config.LocalConfig{
+			cfg.DestLocal = config.LocalConfig{
 				Path: *localDestPath,
 			}
-			minioConfig.DestMinio = config.MinioConfig{} // Empty Minio config for local destination
 		}
 
-		log.Printf("Debug: final config before save: %+v", minioConfig)
-		fileConfig.SetProjectConfig(*projectName, minioConfig)
+		fileConfig.SetProjectConfig(*projectName, *cfg)
 		if err := config.SaveConfig(projectsDir, fileConfig); err != nil {
 			log.Fatalf("Failed to save config: %v", err)
 		}
@@ -238,118 +232,58 @@ func main() {
 	}
 
 	// Get project config
-	projectConfig, exists := fileConfig.GetProjectConfig(*projectName)
-	if !exists {
-		log.Fatalf("No configuration found for project %s. Please run config command first.", *projectName)
+	cfg, err := fileConfig.GetProjectConfig(*projectName)
+	if err != nil {
+		log.Fatalf("Failed to get project config: %v", err)
 	}
 
-	// Create configuration using saved values and any overrides from command line
-	cfg := projectConfig
+	// Set database path
 	cfg.DatabasePath = filepath.Join(projectDir, "files.db")
 
-	// Override with command line values if provided
-	if *sourceEndpoint != "" {
-		cfg.SourceMinio.Endpoint = *sourceEndpoint
+	// Debug config
+	log.Printf("Debug: Project config: %+v", cfg)
+	log.Printf("Debug: Source Minio config: %+v", cfg.SourceMinio)
+	if cfg.DestType == config.DestinationMinio {
+		log.Printf("Debug: Destination Minio config: %+v", cfg.DestMinio)
+	} else {
+		log.Printf("Debug: Destination Local config: %+v", cfg.DestLocal)
 	}
-	if *sourceAccessKey != "" {
-		cfg.SourceMinio.AccessKeyID = *sourceAccessKey
-	}
-	if *sourceSecretKey != "" {
-		cfg.SourceMinio.SecretAccessKey = *sourceSecretKey
-	}
-	if *sourceBucket != "" {
-		cfg.SourceMinio.BucketName = *sourceBucket
-	}
-	if *sourceFolder != "" {
-		cfg.SourceMinio.FolderPath = *sourceFolder
-	}
-	// Only override UseSSL if the flag was explicitly set
-	sourceUseSSLSet := false
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "source-use-ssl" {
-			sourceUseSSLSet = true
-		}
-	})
-	if sourceUseSSLSet {
-		cfg.SourceMinio.UseSSL = sourceUseSSL
-	}
-
-	// Handle destination overrides based on type
-	if *destType != "minio" && *destType != "local" {
-		cfg.DestType = config.DestinationType(*destType)
-	}
-
-	switch cfg.DestType {
-	case config.DestinationMinio:
-		if *destEndpoint != "" {
-			cfg.DestMinio.Endpoint = *destEndpoint
-		}
-		if *destAccessKey != "" {
-			cfg.DestMinio.AccessKeyID = *destAccessKey
-		}
-		if *destSecretKey != "" {
-			cfg.DestMinio.SecretAccessKey = *destSecretKey
-		}
-		if *destBucket != "" {
-			cfg.DestMinio.BucketName = *destBucket
-		}
-		if *destFolder != "" {
-			cfg.DestMinio.FolderPath = *destFolder
-		}
-		// Only override UseSSL if the flag was explicitly set
-		destUseSSLSet := false
-		flag.Visit(func(f *flag.Flag) {
-			if f.Name == "dest-use-ssl" {
-				destUseSSLSet = true
-			}
-		})
-		if destUseSSLSet {
-			cfg.DestMinio.UseSSL = *destUseSSL
-		}
-	case config.DestinationLocal:
-		if *localDestPath != "" {
-			cfg.DestLocal.Path = *localDestPath
-		}
-	}
-
-	// Create sync service
-	service, err := sync.NewService(cfg)
-	if err != nil {
-		log.Fatalf("Failed to create sync service: %v", err)
-	}
-	defer service.Close()
-
-	// Setup context with cancellation
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle interruption signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\nReceived interrupt signal. Cleaning up...")
-		cancel()
-	}()
 
 	// Execute command
 	switch *command {
 	case "update-list":
 		fmt.Println("Updating source file list...")
-		if err := service.UpdateSourceFileList(ctx); err != nil {
+		syncService, err := sync.NewService(cfg)
+		if err != nil {
+			log.Fatalf("Failed to create sync service: %v", err)
+		}
+		defer syncService.Close()
+
+		if err := syncService.UpdateSourceList(context.Background()); err != nil {
 			log.Fatalf("Failed to update source file list: %v", err)
 		}
 		fmt.Println("Source file list updated successfully")
 
 	case "sync":
 		fmt.Printf("Starting sync with %d workers...\n", *workers)
-		if err := service.SyncFiles(ctx, *workers); err != nil {
+		syncService, err := sync.NewService(cfg)
+		if err != nil {
+			log.Fatalf("Failed to create sync service: %v", err)
+		}
+		defer syncService.Close()
+
+		if err := syncService.StartSync(context.Background(), *workers); err != nil {
 			log.Fatalf("Failed to sync files: %v", err)
 		}
-		fmt.Println("Sync completed successfully")
 
 	case "status":
-		status, err := service.GetStatus()
+		syncService, err := sync.NewService(cfg)
+		if err != nil {
+			log.Fatalf("Failed to create sync service: %v", err)
+		}
+		defer syncService.Close()
+
+		status, err := syncService.GetStatus()
 		if err != nil {
 			log.Fatalf("Failed to get sync status: %v", err)
 		}
@@ -360,16 +294,17 @@ func main() {
 			log.Fatal("Import file path is required for import-list command")
 		}
 
-		fmt.Printf("Importing file list from %s...\n", *importFile)
-		
-		// Read file paths
-		data, err := os.ReadFile(*importFile)
-		if err != nil {
-			log.Fatalf("Failed to read import file: %v", err)
+		// Get absolute path if relative
+		importPath := *importFile
+		if !filepath.IsAbs(importPath) {
+			absPath, err := filepath.Abs(importPath)
+			if err != nil {
+				log.Fatalf("Failed to get absolute path: %v", err)
+			}
+			importPath = absPath
 		}
 
-		// Split into lines
-		paths := strings.Split(string(data), "\n")
+		fmt.Printf("Importing file list from %s...\n", importPath)
 
 		// Create sync service
 		syncService, err := sync.NewService(cfg)
@@ -378,30 +313,10 @@ func main() {
 		}
 		defer syncService.Close()
 
-		// Import each file
-		var validPaths []string
-		prefix := cfg.SourceMinio.FolderPath + "/"
-		for _, path := range paths {
-			path = strings.TrimSpace(path)
-			if path == "" {
-				continue
-			}
-
-			// Remove folder prefix if it exists
-			if strings.HasPrefix(path, prefix) {
-				path = path[len(prefix):]
-			}
-
-			validPaths = append(validPaths, path)
-		}
-
-		// Update database with imported paths
-		if err := syncService.ImportFileList(context.Background(), validPaths); err != nil {
+		// Import file list
+		if err := syncService.ImportFileList(context.Background(), []string{importPath}); err != nil {
 			log.Fatalf("Failed to import file list: %v", err)
 		}
-
-		fmt.Printf("Successfully imported %d files\n", len(validPaths))
-		return
 
 	default:
 		log.Fatalf("Unknown command: %s", *command)

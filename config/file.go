@@ -8,27 +8,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type ProjectMinioConfig struct {
-	Source   MinioConfig     `yaml:"source"`
-	DestType DestinationType `yaml:"destType"`
-	Dest     *MinioConfig    `yaml:"dest,omitempty"`
-	Local    *LocalConfig    `yaml:"local,omitempty"`
-}
-
 type FileConfig struct {
 	Projects map[string]ProjectMinioConfig `yaml:"projects"`
 }
 
 func LoadConfig(projectsDir string) (*FileConfig, error) {
 	configPath := filepath.Join(projectsDir, "config.yaml")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return &FileConfig{
+			Projects: make(map[string]ProjectMinioConfig),
+		}, nil
+	}
+
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			// Return empty config if file doesn't exist
-			return &FileConfig{
-				Projects: make(map[string]ProjectMinioConfig),
-			}, nil
-		}
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
@@ -62,14 +55,14 @@ func SaveConfig(projectsDir string, config *FileConfig) error {
 	return nil
 }
 
-func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) {
-	minioConfig, exists := c.Projects[projectName]
-	if !exists {
-		return ProjectConfig{}, false
+func (f *FileConfig) GetProjectConfig(projectName string) (*ProjectConfig, error) {
+	minioConfig, ok := f.Projects[projectName]
+	if !ok {
+		return nil, fmt.Errorf("project %s not found", projectName)
 	}
 
-	// Make deep copies of all structs
-	config := ProjectConfig{
+	// Convert from old format to new format
+	config := &ProjectConfig{
 		ProjectName: projectName,
 		SourceMinio: MinioConfig{
 			Endpoint:        minioConfig.Source.Endpoint,
@@ -79,8 +72,7 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 			BucketName:     minioConfig.Source.BucketName,
 			FolderPath:     minioConfig.Source.FolderPath,
 		},
-		DestType:     minioConfig.DestType,
-		DatabasePath: filepath.Join("projects", projectName, "files.db"),
+		DestType: minioConfig.DestType,
 	}
 
 	switch minioConfig.DestType {
@@ -103,38 +95,42 @@ func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) 
 		}
 	}
 
-	return config, true
+	return config, nil
 }
 
-func (c *FileConfig) SetProjectConfig(projectName string, config ProjectConfig) {
-	minioConfig := ProjectMinioConfig{
-		Source: MinioConfig{
-			Endpoint:        config.SourceMinio.Endpoint,
-			AccessKeyID:     config.SourceMinio.AccessKeyID,
-			SecretAccessKey: config.SourceMinio.SecretAccessKey,
-			UseSSL:         config.SourceMinio.UseSSL,
-			BucketName:     config.SourceMinio.BucketName,
-			FolderPath:     config.SourceMinio.FolderPath,
-		},
-		DestType: config.DestType,
+func (f *FileConfig) SetProjectConfig(projectName string, cfg ProjectConfig) {
+	if f.Projects == nil {
+		f.Projects = make(map[string]ProjectMinioConfig)
 	}
 
-	switch config.DestType {
+	// Convert from new format to old format
+	minioConfig := ProjectMinioConfig{
+		Source: MinioConfig{
+			Endpoint:        cfg.SourceMinio.Endpoint,
+			AccessKeyID:     cfg.SourceMinio.AccessKeyID,
+			SecretAccessKey: cfg.SourceMinio.SecretAccessKey,
+			UseSSL:         cfg.SourceMinio.UseSSL,
+			BucketName:     cfg.SourceMinio.BucketName,
+			FolderPath:     cfg.SourceMinio.FolderPath,
+		},
+		DestType: cfg.DestType,
+	}
+
+	switch cfg.DestType {
 	case DestinationMinio:
 		minioConfig.Dest = &MinioConfig{
-			Endpoint:        config.DestMinio.Endpoint,
-			AccessKeyID:     config.DestMinio.AccessKeyID,
-			SecretAccessKey: config.DestMinio.SecretAccessKey,
-			UseSSL:         config.DestMinio.UseSSL,
-			BucketName:     config.DestMinio.BucketName,
-			FolderPath:     config.DestMinio.FolderPath,
+			Endpoint:        cfg.DestMinio.Endpoint,
+			AccessKeyID:     cfg.DestMinio.AccessKeyID,
+			SecretAccessKey: cfg.DestMinio.SecretAccessKey,
+			UseSSL:         cfg.DestMinio.UseSSL,
+			BucketName:     cfg.DestMinio.BucketName,
+			FolderPath:     cfg.DestMinio.FolderPath,
 		}
 	case DestinationLocal:
 		minioConfig.Local = &LocalConfig{
-			Path: config.DestLocal.Path,
+			Path: cfg.DestLocal.Path,
 		}
-		minioConfig.Dest = nil // Ensure Dest is nil for local destination
 	}
 
-	c.Projects[projectName] = minioConfig
+	f.Projects[projectName] = minioConfig
 }
