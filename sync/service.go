@@ -27,10 +27,20 @@ type SyncStatus struct {
 }
 
 func NewService(cfg config.ProjectConfig) (*Service, error) {
-	// Debug: Print source config
-	log.Printf("NewService source config: UseSSL=%v", cfg.SourceMinio.UseSSL)
+	// Make a deep copy of the source config
+	sourceCfg := config.MinioConfig{
+		Endpoint:        cfg.SourceMinio.Endpoint,
+		AccessKeyID:     cfg.SourceMinio.AccessKeyID,
+		SecretAccessKey: cfg.SourceMinio.SecretAccessKey,
+		UseSSL:         cfg.SourceMinio.UseSSL,
+		BucketName:     cfg.SourceMinio.BucketName,
+	}
 
-	sourceClient, err := minio.NewMinioClient(cfg.SourceMinio)
+	// Debug: Print source config before and after copy
+	log.Printf("NewService source config before copy: UseSSL=%v", cfg.SourceMinio.UseSSL)
+	log.Printf("NewService source config after copy: UseSSL=%v", sourceCfg.UseSSL)
+
+	sourceClient, err := minio.NewMinioClient(sourceCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create source minio client: %w", err)
 	}
@@ -40,10 +50,20 @@ func NewService(cfg config.ProjectConfig) (*Service, error) {
 
 	switch cfg.DestType {
 	case config.DestinationMinio:
-		// Debug: Print dest config
-		log.Printf("NewService dest config: UseSSL=%v", cfg.DestMinio.UseSSL)
+		// Make a deep copy of the dest config
+		destCfg := config.MinioConfig{
+			Endpoint:        cfg.DestMinio.Endpoint,
+			AccessKeyID:     cfg.DestMinio.AccessKeyID,
+			SecretAccessKey: cfg.DestMinio.SecretAccessKey,
+			UseSSL:         cfg.DestMinio.UseSSL,
+			BucketName:     cfg.DestMinio.BucketName,
+		}
 
-		destClient, err = minio.NewMinioClient(cfg.DestMinio)
+		// Debug: Print dest config before and after copy
+		log.Printf("NewService dest config before copy: UseSSL=%v", cfg.DestMinio.UseSSL)
+		log.Printf("NewService dest config after copy: UseSSL=%v", destCfg.UseSSL)
+
+		destClient, err = minio.NewMinioClient(destCfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create destination minio client: %w", err)
 		}
