@@ -8,9 +8,22 @@ type MinioConfig struct {
 	BucketName     string
 }
 
+type DestinationType string
+
+const (
+	DestinationMinio DestinationType = "minio"
+	DestinationLocal DestinationType = "local"
+)
+
+type LocalConfig struct {
+	Path string
+}
+
 type ProjectConfig struct {
 	ProjectName    string
 	SourceMinio    MinioConfig
-	DestMinio      MinioConfig
+	DestType       DestinationType
+	DestMinio      MinioConfig    // Used when DestType is DestinationMinio
+	DestLocal      LocalConfig    // Used when DestType is DestinationLocal
 	DatabasePath   string
 }

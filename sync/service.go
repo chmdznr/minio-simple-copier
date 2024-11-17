@@ -9,12 +9,15 @@ import (
 
 	"minio-simple-copier/config"
 	"minio-simple-copier/db"
+	"minio-simple-copier/local"
 	"minio-simple-copier/minio"
 )
 
 type Service struct {
 	sourceClient *minio.MinioClient
 	destClient   *minio.MinioClient
+	localDest    *local.Storage
+	destType     config.DestinationType
 	database     *db.Database
 	projectName  string
 }
@@ -30,9 +33,22 @@ func NewService(cfg config.ProjectConfig) (*Service, error) {
 		return nil, fmt.Errorf("failed to create source minio client: %w", err)
 	}
 
-	destClient, err := minio.NewMinioClient(cfg.DestMinio)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create destination minio client: %w", err)
+	var destClient *minio.MinioClient
+	var localDest *local.Storage
+
+	switch cfg.DestType {
+	case config.DestinationMinio:
+		destClient, err = minio.NewMinioClient(cfg.DestMinio)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create destination minio client: %w", err)
+		}
+	case config.DestinationLocal:
+		localDest, err = local.NewStorage(cfg.DestLocal)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create local storage: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported destination type: %s", cfg.DestType)
 	}
 
 	database, err := db.NewDatabase(cfg.DatabasePath)
@@ -47,6 +63,8 @@ func NewService(cfg config.ProjectConfig) (*Service, error) {
 	return &Service{
 		sourceClient: sourceClient,
 		destClient:  destClient,
+		localDest:   localDest,
+		destType:    cfg.DestType,
 		database:    database,
 		projectName: cfg.ProjectName,
 	}, nil
@@ -162,15 +180,47 @@ func (s *Service) syncFile(ctx context.Context, file *db.FileEntry) error {
 		return fmt.Errorf("failed to update file status: %w", err)
 	}
 
+	var exists bool
+	var err error
+
 	// Check if file exists in destination
-	_, err := s.destClient.StatObject(ctx, file.Path)
-	if err == nil {
+	switch s.destType {
+	case config.DestinationMinio:
+		_, err = s.destClient.StatObject(ctx, file.Path)
+		exists = err == nil
+	case config.DestinationLocal:
+		exists, err = s.localDest.FileExists(file.Path)
+		if err != nil {
+			return fmt.Errorf("failed to check file existence: %w", err)
+		}
+	}
+
+	if exists {
 		// File exists, update status
 		return s.database.UpdateFileStatus(file.ID, db.StatusExists, "")
 	}
 
-	// Copy file
-	if err := s.sourceClient.CopyFile(ctx, s.destClient, file.Path); err != nil {
+	// Get source object
+	object, err := s.sourceClient.GetObject(ctx, file.Path)
+	if err != nil {
+		return fmt.Errorf("failed to get source object: %w", err)
+	}
+	defer object.Close()
+
+	objectInfo, err := object.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get object info: %w", err)
+	}
+
+	// Copy file based on destination type
+	switch s.destType {
+	case config.DestinationMinio:
+		err = s.sourceClient.CopyFile(ctx, s.destClient, file.Path)
+	case config.DestinationLocal:
+		err = s.localDest.WriteFile(ctx, file.Path, object, objectInfo.Size)
+	}
+
+	if err != nil {
 		return fmt.Errorf("failed to copy file: %w", err)
 	}
 

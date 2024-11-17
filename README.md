@@ -15,26 +15,73 @@ A high-performance CLI tool for synchronizing files between Minio buckets, optim
 
 ## Installation
 
+### Option 1: Using go get
 ```bash
 go get github.com/chmdznr/minio-simple-copier
 ```
+
+### Option 2: Building from Source
+
+1. Clone the repository:
+```bash
+git clone https://github.com/chmdznr/minio-simple-copier.git
+cd minio-simple-copier
+```
+
+2. Install dependencies:
+```bash
+go mod download
+```
+
+3. Build the binary:
+```bash
+# For Windows
+go build -o minio-simple-copier.exe
+
+# For Linux/Mac
+go build -o minio-simple-copier
+```
+
+4. (Optional) Install to your system:
+```bash
+# Install to $GOPATH/bin
+go install
+
+# Or copy the binary to a location in your PATH
+# Windows example:
+copy minio-simple-copier.exe %USERPROFILE%\go\bin\
+
+# Linux/Mac example:
+cp minio-simple-copier ~/go/bin/
+```
+
+The compiled binary will be available in the current directory. Make sure it's in your system's PATH to run it from anywhere.
+
+### Requirements
+
+- Go 1.23 or later
+- SQLite3
+- Git (for cloning the repository)
 
 ## Usage
 
 The tool provides four main commands:
 
-1. `config`: Save Minio connection details for a project
+1. `config`: Save Minio connection details and destination settings for a project
 2. `update-list`: Scan the source Minio bucket and update the local SQLite database with file information
-3. `sync`: Copy files from source to destination bucket based on the database
+3. `sync`: Copy files from source to destination (either Minio bucket or local folder)
 4. `status`: Show current synchronization status, including file counts, sizes, and recent errors
 
 ### Basic Usage
 
-First, save your Minio connection details:
+First, save your configuration. You can choose between two destination types:
+
+#### Option 1: Minio-to-Minio Sync
 ```bash
-# Save project configuration
+# Save project configuration for Minio-to-Minio sync
 minio-simple-copier -project myproject \
     -command config \
+    -dest-type minio \
     -source-endpoint source-minio:9000 \
     -source-access-key YOUR_ACCESS_KEY \
     -source-secret-key YOUR_SECRET_KEY \
@@ -43,6 +90,19 @@ minio-simple-copier -project myproject \
     -dest-access-key YOUR_ACCESS_KEY \
     -dest-secret-key YOUR_SECRET_KEY \
     -dest-bucket dest-bucket
+```
+
+#### Option 2: Minio-to-Local Sync
+```bash
+# Save project configuration for Minio-to-Local sync
+minio-simple-copier -project myproject \
+    -command config \
+    -dest-type local \
+    -source-endpoint source-minio:9000 \
+    -source-access-key YOUR_ACCESS_KEY \
+    -source-secret-key YOUR_SECRET_KEY \
+    -source-bucket source-bucket \
+    -local-path "D:/backup/minio-files"
 ```
 
 Then you can run commands without specifying connection details each time:
@@ -59,10 +119,11 @@ minio-simple-copier -project myproject -command status
 
 You can also override saved configuration values by providing them in the command line:
 ```bash
-# Use different source bucket for this run
+# Use different source bucket and local path for this run
 minio-simple-copier -project myproject \
     -command sync \
-    -source-bucket different-bucket
+    -source-bucket different-bucket \
+    -local-path "E:/different-backup"
 ```
 
 ### Configuration File
@@ -71,43 +132,30 @@ The tool stores connection details in `projects/config.yaml`:
 
 ```yaml
 projects:
-  myproject:
+  myproject-minio:
     source:
       endpoint: source-minio:9000
       accessKeyID: YOUR_ACCESS_KEY
       secretAccessKey: YOUR_SECRET_KEY
       useSSL: true
       bucketName: source-bucket
+    destType: minio
     dest:
       endpoint: dest-minio:9000
       accessKeyID: YOUR_ACCESS_KEY
       secretAccessKey: YOUR_SECRET_KEY
       useSSL: true
       bucketName: dest-bucket
-```
-
-### Status Output Example
-
-```
-Sync Status:
-------------
-completed : 1234 files (2.5 GB)
-copying   :    5 files (100 MB)
-error     :    2 files (50 MB)
-exists    :  500 files (1.2 GB)
-pending   :   50 files (200 MB)
-
-Total: 1791 files (4.05 GB)
-
-Recent Errors:
---------------
-File: path/to/file1.dat
-Error: connection timeout
-Time: 2023-08-10T15:04:05Z
-
-File: path/to/file2.dat
-Error: insufficient permissions
-Time: 2023-08-10T15:03:02Z
+  myproject-local:
+    source:
+      endpoint: source-minio:9000
+      accessKeyID: YOUR_ACCESS_KEY
+      secretAccessKey: YOUR_SECRET_KEY
+      useSSL: true
+      bucketName: source-bucket
+    destType: local
+    local:
+      path: "D:/backup/minio-files"
 ```
 
 ### Command Line Options
@@ -132,7 +180,13 @@ Time: 2023-08-10T15:03:02Z
   -source-use-ssl
         Use SSL for source Minio (default true)
 
-  Destination Minio Configuration (optional after config):
+  Destination Configuration:
+  -dest-type string
+        Destination type (minio or local) (default "minio")
+  -local-path string
+        Local destination path (when dest-type is local)
+
+  Destination Minio Configuration (when dest-type is minio):
   -dest-endpoint string
         Destination Minio endpoint
   -dest-access-key string
@@ -167,21 +221,6 @@ Files in the database can have the following states:
 - Supports multipart upload for large files
 - Uses ETag comparison to detect changes
 - Batch processing of file operations
-
-## Development
-
-### Requirements
-
-- Go 1.16 or later
-- SQLite3
-
-### Building from Source
-
-```bash
-git clone https://github.com/chmdznr/minio-simple-copier.git
-cd minio-simple-copier
-go build
-```
 
 ## License
 

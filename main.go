@@ -27,11 +27,14 @@ func main() {
 		sourceBucket    = flag.String("source-bucket", "", "Source Minio bucket")
 		sourceUseSSL    = flag.Bool("source-use-ssl", true, "Use SSL for source Minio")
 
-		destEndpoint  = flag.String("dest-endpoint", "", "Destination Minio endpoint")
-		destAccessKey = flag.String("dest-access-key", "", "Destination Minio access key")
-		destSecretKey = flag.String("dest-secret-key", "", "Destination Minio secret key")
-		destBucket    = flag.String("dest-bucket", "", "Destination Minio bucket")
-		destUseSSL    = flag.Bool("dest-use-ssl", true, "Use SSL for destination Minio")
+		destType      = flag.String("dest-type", "minio", "Destination type (minio or local)")
+		localDestPath = flag.String("local-path", "", "Local destination path (when dest-type is local)")
+
+		destEndpoint  = flag.String("dest-endpoint", "", "Destination Minio endpoint (when dest-type is minio)")
+		destAccessKey = flag.String("dest-access-key", "", "Destination Minio access key (when dest-type is minio)")
+		destSecretKey = flag.String("dest-secret-key", "", "Destination Minio secret key (when dest-type is minio)")
+		destBucket    = flag.String("dest-bucket", "", "Destination Minio bucket (when dest-type is minio)")
+		destUseSSL    = flag.Bool("dest-use-ssl", true, "Use SSL for destination Minio (when dest-type is minio)")
 
 		workers = flag.Int("workers", 5, "Number of concurrent workers")
 		command = flag.String("command", "", "Command to execute (update-list, sync, status, config)")
@@ -61,22 +64,40 @@ func main() {
 
 	// Handle config command first
 	if *command == "config" {
+		destTypeEnum := config.DestinationType(*destType)
+		if destTypeEnum != config.DestinationMinio && destTypeEnum != config.DestinationLocal {
+			log.Fatalf("Invalid destination type: %s. Must be 'minio' or 'local'", *destType)
+		}
+
 		// Save new config
-		minioConfig := config.ProjectMinioConfig{
-			Source: config.MinioConfig{
+		minioConfig := config.ProjectConfig{
+			ProjectName: *projectName,
+			SourceMinio: config.MinioConfig{
 				Endpoint:        *sourceEndpoint,
 				AccessKeyID:     *sourceAccessKey,
 				SecretAccessKey: *sourceSecretKey,
 				UseSSL:         *sourceUseSSL,
 				BucketName:     *sourceBucket,
 			},
-			Dest: config.MinioConfig{
+			DestType: destTypeEnum,
+		}
+
+		switch destTypeEnum {
+		case config.DestinationMinio:
+			minioConfig.DestMinio = config.MinioConfig{
 				Endpoint:        *destEndpoint,
 				AccessKeyID:     *destAccessKey,
 				SecretAccessKey: *destSecretKey,
 				UseSSL:         *destUseSSL,
 				BucketName:     *destBucket,
-			},
+			}
+		case config.DestinationLocal:
+			if *localDestPath == "" {
+				log.Fatal("Local destination path is required when dest-type is local")
+			}
+			minioConfig.DestLocal = config.LocalConfig{
+				Path: *localDestPath,
+			}
 		}
 
 		fileConfig.SetProjectConfig(*projectName, minioConfig)
@@ -94,12 +115,8 @@ func main() {
 	}
 
 	// Create configuration using saved values and any overrides from command line
-	cfg := config.ProjectConfig{
-		ProjectName: *projectName,
-		SourceMinio: projectConfig.Source,
-		DestMinio:   projectConfig.Dest,
-		DatabasePath: filepath.Join(projectDir, "files.db"),
-	}
+	cfg := projectConfig
+	cfg.DatabasePath = filepath.Join(projectDir, "files.db")
 
 	// Override with command line values if provided
 	if *sourceEndpoint != "" {
@@ -116,19 +133,31 @@ func main() {
 	}
 	cfg.SourceMinio.UseSSL = *sourceUseSSL
 
-	if *destEndpoint != "" {
-		cfg.DestMinio.Endpoint = *destEndpoint
+	// Handle destination overrides based on type
+	if *destType != "minio" && *destType != "local" {
+		cfg.DestType = config.DestinationType(*destType)
 	}
-	if *destAccessKey != "" {
-		cfg.DestMinio.AccessKeyID = *destAccessKey
+
+	switch cfg.DestType {
+	case config.DestinationMinio:
+		if *destEndpoint != "" {
+			cfg.DestMinio.Endpoint = *destEndpoint
+		}
+		if *destAccessKey != "" {
+			cfg.DestMinio.AccessKeyID = *destAccessKey
+		}
+		if *destSecretKey != "" {
+			cfg.DestMinio.SecretAccessKey = *destSecretKey
+		}
+		if *destBucket != "" {
+			cfg.DestMinio.BucketName = *destBucket
+		}
+		cfg.DestMinio.UseSSL = *destUseSSL
+	case config.DestinationLocal:
+		if *localDestPath != "" {
+			cfg.DestLocal.Path = *localDestPath
+		}
 	}
-	if *destSecretKey != "" {
-		cfg.DestMinio.SecretAccessKey = *destSecretKey
-	}
-	if *destBucket != "" {
-		cfg.DestMinio.BucketName = *destBucket
-	}
-	cfg.DestMinio.UseSSL = *destUseSSL
 
 	// Create sync service
 	service, err := sync.NewService(cfg)

@@ -10,7 +10,9 @@ import (
 
 type ProjectMinioConfig struct {
 	Source MinioConfig `yaml:"source"`
-	Dest   MinioConfig `yaml:"dest"`
+	DestType DestinationType `yaml:"destType"`
+	Dest   *MinioConfig `yaml:"dest,omitempty"`
+	Local  *LocalConfig `yaml:"local,omitempty"`
 }
 
 type FileConfig struct {
@@ -60,11 +62,44 @@ func SaveConfig(projectsDir string, config *FileConfig) error {
 	return nil
 }
 
-func (c *FileConfig) GetProjectConfig(projectName string) (ProjectMinioConfig, bool) {
-	config, exists := c.Projects[projectName]
-	return config, exists
+func (c *FileConfig) GetProjectConfig(projectName string) (ProjectConfig, bool) {
+	minioConfig, exists := c.Projects[projectName]
+	if !exists {
+		return ProjectConfig{}, false
+	}
+
+	config := ProjectConfig{
+		ProjectName: projectName,
+		SourceMinio: minioConfig.Source,
+		DestType:    minioConfig.DestType,
+	}
+
+	switch minioConfig.DestType {
+	case DestinationMinio:
+		if minioConfig.Dest != nil {
+			config.DestMinio = *minioConfig.Dest
+		}
+	case DestinationLocal:
+		if minioConfig.Local != nil {
+			config.DestLocal = *minioConfig.Local
+		}
+	}
+
+	return config, true
 }
 
-func (c *FileConfig) SetProjectConfig(projectName string, config ProjectMinioConfig) {
-	c.Projects[projectName] = config
+func (c *FileConfig) SetProjectConfig(projectName string, config ProjectConfig) {
+	minioConfig := ProjectMinioConfig{
+		Source:   config.SourceMinio,
+		DestType: config.DestType,
+	}
+
+	switch config.DestType {
+	case DestinationMinio:
+		minioConfig.Dest = &config.DestMinio
+	case DestinationLocal:
+		minioConfig.Local = &config.DestLocal
+	}
+
+	c.Projects[projectName] = minioConfig
 }
