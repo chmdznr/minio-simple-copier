@@ -33,3 +33,5 @@ go.work
 # OS specific
 .DS_Store
 Thumbs.db
+
+*.txt
