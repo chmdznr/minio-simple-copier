@@ -146,6 +146,31 @@ minio-simple-copier -project folder-backup -command config \
   -local-path=/data/backup/2024-docs
 ```
 
+### Using MinIO Client (mc) for File Lists
+
+If you're experiencing issues with listing files directly from MinIO, you can use the MinIO Client (mc) to generate a file list and import it into the tool:
+
+1. Configure mc:
+```bash
+mc alias set srikandi http://10.31.3.74:9000 admin SrikandiV2.2021s
+```
+
+2. Generate file list:
+```bash
+# List files and save paths to a file
+mc ls --recursive --json srikandi/persuratan/naskah-keluar | jq -r .key > file_list.txt
+```
+
+3. Import the file list:
+```bash
+minio-simple-copier -project folder-backup -command import-list -import-list=file_list.txt
+```
+
+This is useful when:
+- You have network connectivity issues
+- The bucket contains a very large number of files
+- You want to sync a specific subset of files
+
 ### Running Sync Operations
 
 After configuring a project, you can run sync operations:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"path"
 	"sync"
 
 	"github.com/chmdznr/minio-simple-copier/v2/config"
@@ -254,4 +255,45 @@ func (s *Service) GetStatus() (*SyncStatus, error) {
 		Counts:       counts,
 		RecentErrors: recentErrors,
 	}, nil
+}
+
+// ImportFileList imports a list of file paths into the database
+func (s *Service) ImportFileList(ctx context.Context, paths []string) error {
+	log.Printf("Importing %d files...", len(paths))
+	
+	// Get file info for each path
+	for _, filePath := range paths {
+		// Construct full path with folder prefix
+		fullPath := filePath
+		if s.sourceClient.FolderPath != "" {
+			fullPath = path.Join(s.sourceClient.FolderPath, filePath)
+		}
+
+		log.Printf("Debug: Getting info for file: %s", fullPath)
+		
+		// Get file info from source
+		info, err := s.sourceClient.StatObject(ctx, fullPath)
+		if err != nil {
+			log.Printf("Warning: Failed to get file info for %s: %v", fullPath, err)
+			continue
+		}
+
+		// Add or update file in database
+		entry := &db.FileEntry{
+			ProjectName:  s.projectName,
+			Path:         filePath, // Store original path without prefix
+			Size:         info.Size,
+			ETag:         info.ETag,
+			LastModified: info.LastModified,
+			Status:       db.StatusPending,
+		}
+
+		if err := s.database.InsertFileEntry(entry); err != nil {
+			return fmt.Errorf("failed to insert file entry: %w", err)
+		}
+		
+		log.Printf("Debug: Added file to database: %s (size: %d, etag: %s)", filePath, info.Size, info.ETag)
+	}
+
+	return nil
 }

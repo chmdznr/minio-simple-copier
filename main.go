@@ -73,6 +73,7 @@ Commands:
   update-list   Update source file list
   sync          Start file synchronization
   status        Show current sync status
+  import-list   Import file list from mc ls --recursive --json output
 
 Examples:
   1. Configure Minio-to-Minio sync:
@@ -100,6 +101,9 @@ Examples:
   6. Check sync status:
      minio-simple-copier -project myproject -command status
 
+  7. Import file list:
+     minio-simple-copier -project myproject -command import-list -import-list file_list.txt
+
 For more information, visit: https://github.com/chmdznr/minio-simple-copier`)
 }
 
@@ -124,7 +128,10 @@ func main() {
 		destFolder    = flag.String("dest-folder", "", "Destination folder path (when dest-type is minio)")
 
 		workers = flag.Int("workers", 5, "Number of concurrent workers")
-		command = flag.String("command", "", "Command to execute (help, config, update-list, sync, status)")
+		command = flag.String("command", "", "Command to execute (help, config, update-list, sync, status, import-list)")
+
+		// New flag for importing file list
+		importFile = flag.String("import-list", "", "Import file list from mc ls --recursive --json output")
 	)
 
 	// Handle SSL flag separately
@@ -347,6 +354,54 @@ func main() {
 			log.Fatalf("Failed to get sync status: %v", err)
 		}
 		printStatus(status)
+
+	case "import-list":
+		if *importFile == "" {
+			log.Fatal("Import file path is required for import-list command")
+		}
+
+		fmt.Printf("Importing file list from %s...\n", *importFile)
+		
+		// Read file paths
+		data, err := os.ReadFile(*importFile)
+		if err != nil {
+			log.Fatalf("Failed to read import file: %v", err)
+		}
+
+		// Split into lines
+		paths := strings.Split(string(data), "\n")
+
+		// Create sync service
+		syncService, err := sync.NewService(cfg)
+		if err != nil {
+			log.Fatalf("Failed to create sync service: %v", err)
+		}
+		defer syncService.Close()
+
+		// Import each file
+		var validPaths []string
+		prefix := cfg.SourceMinio.FolderPath + "/"
+		for _, path := range paths {
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+
+			// Remove folder prefix if it exists
+			if strings.HasPrefix(path, prefix) {
+				path = path[len(prefix):]
+			}
+
+			validPaths = append(validPaths, path)
+		}
+
+		// Update database with imported paths
+		if err := syncService.ImportFileList(context.Background(), validPaths); err != nil {
+			log.Fatalf("Failed to import file list: %v", err)
+		}
+
+		fmt.Printf("Successfully imported %d files\n", len(validPaths))
+		return
 
 	default:
 		log.Fatalf("Unknown command: %s", *command)
