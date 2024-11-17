@@ -3,13 +3,11 @@ package minio
 import (
 	"context"
 	"fmt"
-	"io"
-	"path"
 	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/chmdznr/minio-simple-copier/config"
+	"github.com/chmdznr/minio-simple-copier/v2/config"
 )
 
 type MinioClient struct {
