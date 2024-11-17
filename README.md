@@ -107,34 +107,43 @@ minio-simple-copier -h
 
 #### 1. Minio-to-Minio Sync (Full Bucket)
 ```bash
-# Configure Minio-to-Minio sync
 minio-simple-copier -project backup -command config \
-  -source-endpoint source-minio:9000 \
-  -source-bucket source-bucket \
-  -dest-type minio \
-  -dest-endpoint dest-minio:9000 \
-  -dest-bucket dest-bucket
+  -source-endpoint=source:9000 \
+  -source-access-key=admin \
+  -source-secret-key=password \
+  -source-bucket=bucket1 \
+  -source-use-ssl=false \
+  -dest-type=minio \
+  -dest-endpoint=dest:9000 \
+  -dest-access-key=admin \
+  -dest-secret-key=password \
+  -dest-bucket=bucket2 \
+  -dest-use-ssl=false
 ```
 
 #### 2. Minio-to-Local Sync (Full Bucket)
 ```bash
-# Configure Minio-to-Local sync
 minio-simple-copier -project local-backup -command config \
-  -source-endpoint minio:9000 \
-  -source-bucket mybucket \
-  -dest-type local \
-  -local-path "/data/backup/minio-files"
+  -source-endpoint=minio:9000 \
+  -source-access-key=admin \
+  -source-secret-key=password \
+  -source-bucket=mybucket \
+  -source-use-ssl=false \
+  -dest-type=local \
+  -local-path=/data/backup
 ```
 
 #### 3. Folder-Specific Sync
 ```bash
-# Configure sync for a specific folder
 minio-simple-copier -project folder-backup -command config \
-  -source-endpoint minio:9000 \
-  -source-bucket mybucket \
-  -source-folder "documents/2024" \
-  -dest-type local \
-  -local-path "/data/backup/2024-docs"
+  -source-endpoint=minio:9000 \
+  -source-access-key=admin \
+  -source-secret-key=password \
+  -source-bucket=mybucket \
+  -source-folder=docs/2024 \
+  -source-use-ssl=false \
+  -dest-type=local \
+  -local-path=/data/backup/2024-docs
 ```
 
 ### Running Sync Operations
@@ -144,10 +153,14 @@ After configuring a project, you can run sync operations:
 ```bash
 # 1. Update the file list
 minio-simple-copier -project myproject -command update-list
+```
 
+```bash
 # 2. Start synchronization with 10 concurrent workers
-minio-simple-copier -project myproject -command sync -workers 10
+minio-simple-copier -project myproject -command sync -workers=10
+```
 
+```bash
 # 3. Check sync status
 minio-simple-copier -project myproject -command status
 ```

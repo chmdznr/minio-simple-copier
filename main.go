@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -110,7 +111,6 @@ func main() {
 		sourceAccessKey = flag.String("source-access-key", "", "Source Minio access key")
 		sourceSecretKey = flag.String("source-secret-key", "", "Source Minio secret key")
 		sourceBucket    = flag.String("source-bucket", "", "Source Minio bucket")
-		sourceUseSSL    = flag.Bool("source-use-ssl", true, "Use SSL for source Minio")
 		sourceFolder    = flag.String("source-folder", "", "Source folder path (e.g., naskah-keluar)")
 
 		destType      = flag.String("dest-type", "minio", "Destination type (minio or local)")
@@ -127,7 +127,23 @@ func main() {
 		command = flag.String("command", "", "Command to execute (help, config, update-list, sync, status)")
 	)
 
+	// Handle SSL flag separately
+	var sourceUseSSL bool
+	flag.BoolVar(&sourceUseSSL, "source-use-ssl", true, "Use SSL for source Minio")
+
 	flag.Parse()
+
+	// Debug: Print all arguments
+	log.Println("Debug: Command line arguments:")
+	for i, arg := range os.Args {
+		log.Printf("Arg[%d]: %q", i, arg)
+	}
+
+	// Debug: Print all flags
+	log.Println("Debug: Printing all flags:")
+	flag.Visit(func(f *flag.Flag) {
+		log.Printf("Flag: %s = %q", f.Name, f.Value.String())
+	})
 
 	// Show help if no arguments or help command
 	if len(os.Args) == 1 || (len(os.Args) == 2 && (os.Args[1] == "-h" || os.Args[1] == "--help")) || *command == "help" {
@@ -157,9 +173,16 @@ func main() {
 
 	// Handle config command first
 	if *command == "config" {
-		destTypeEnum := config.DestinationType(*destType)
+		// Determine destination type
+		destTypeStr := strings.ToLower(*destType)
+		log.Printf("Debug: Raw dest-type flag value: %q", *destType)
+		log.Printf("Debug: Lowercased dest-type value: %q", destTypeStr)
+		
+		destTypeEnum := config.DestinationType(destTypeStr)
+		log.Printf("Debug: destTypeEnum after conversion: %q", destTypeEnum)
+		
 		if destTypeEnum != config.DestinationMinio && destTypeEnum != config.DestinationLocal {
-			log.Fatalf("Invalid destination type: %s. Must be 'minio' or 'local'", *destType)
+			log.Fatalf("Invalid destination type: %s. Must be 'minio' or 'local'", destTypeStr)
 		}
 
 		// Save new config
@@ -169,13 +192,15 @@ func main() {
 				Endpoint:        *sourceEndpoint,
 				AccessKeyID:     *sourceAccessKey,
 				SecretAccessKey: *sourceSecretKey,
-				UseSSL:         *sourceUseSSL,
+				UseSSL:         sourceUseSSL,
 				BucketName:     *sourceBucket,
 				FolderPath:     *sourceFolder,
 			},
 			DestType: destTypeEnum,
 		}
 
+		// Handle destination based on type
+		log.Printf("Debug: handling destination for type: %q", destTypeEnum)
 		switch destTypeEnum {
 		case config.DestinationMinio:
 			minioConfig.DestMinio = config.MinioConfig{
@@ -193,8 +218,10 @@ func main() {
 			minioConfig.DestLocal = config.LocalConfig{
 				Path: *localDestPath,
 			}
+			minioConfig.DestMinio = config.MinioConfig{} // Empty Minio config for local destination
 		}
 
+		log.Printf("Debug: final config before save: %+v", minioConfig)
 		fileConfig.SetProjectConfig(*projectName, minioConfig)
 		if err := config.SaveConfig(projectsDir, fileConfig); err != nil {
 			log.Fatalf("Failed to save config: %v", err)
@@ -237,7 +264,7 @@ func main() {
 		}
 	})
 	if sourceUseSSLSet {
-		cfg.SourceMinio.UseSSL = *sourceUseSSL
+		cfg.SourceMinio.UseSSL = sourceUseSSL
 	}
 
 	// Handle destination overrides based on type

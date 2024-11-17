@@ -9,10 +9,10 @@ import (
 )
 
 type ProjectMinioConfig struct {
-	Source MinioConfig `yaml:"source"`
+	Source   MinioConfig     `yaml:"source"`
 	DestType DestinationType `yaml:"destType"`
-	Dest   *MinioConfig `yaml:"dest,omitempty"`
-	Local  *LocalConfig `yaml:"local,omitempty"`
+	Dest     *MinioConfig    `yaml:"dest,omitempty"`
+	Local    *LocalConfig    `yaml:"local,omitempty"`
 }
 
 type FileConfig struct {
@@ -133,6 +133,7 @@ func (c *FileConfig) SetProjectConfig(projectName string, config ProjectConfig) 
 		minioConfig.Local = &LocalConfig{
 			Path: config.DestLocal.Path,
 		}
+		minioConfig.Dest = nil // Ensure Dest is nil for local destination
 	}
 
 	c.Projects[projectName] = minioConfig
