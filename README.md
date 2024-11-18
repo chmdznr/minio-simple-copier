@@ -19,6 +19,7 @@ A high-performance CLI tool for synchronizing files between Minio buckets or to 
 ## Installation
 
 ### Option 1: Using go install
+
 ```bash
 # Make sure CGO is enabled
 export CGO_ENABLED=1
@@ -30,12 +31,14 @@ go install github.com/chmdznr/minio-simple-copier/v2@latest
 ### Option 2: Building from Source
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/chmdznr/minio-simple-copier.git
 cd minio-simple-copier
 ```
 
 2. Install dependencies:
+
 ```bash
 # On Debian/Ubuntu, install SQLite development files
 sudo apt-get install gcc sqlite3 libsqlite3-dev
@@ -54,6 +57,7 @@ go mod download
 ```
 
 3. Build the binary:
+
 ```bash
 # Enable CGO and build
 export CGO_ENABLED=1
@@ -65,6 +69,7 @@ go build -o minio-simple-copier.exe
 ```
 
 4. (Optional) Install to your system:
+
 ```bash
 # Install to $GOPATH/bin
 CGO_ENABLED=1 go install
@@ -97,6 +102,7 @@ The tool provides six main commands:
 ### Getting Started
 
 To see all available options and examples:
+
 ```bash
 # Show help message
 minio-simple-copier -command help
@@ -108,6 +114,7 @@ minio-simple-copier -h
 ### Configuration Examples
 
 #### 1. Minio-to-Minio Sync (Full Bucket)
+
 ```bash
 minio-simple-copier -project backup -command config \
   -source-endpoint=source:9000 \
@@ -124,6 +131,7 @@ minio-simple-copier -project backup -command config \
 ```
 
 #### 2. Minio-to-Local Sync (Full Bucket)
+
 ```bash
 minio-simple-copier -project local-backup -command config \
   -source-endpoint=minio:9000 \
@@ -136,6 +144,7 @@ minio-simple-copier -project local-backup -command config \
 ```
 
 #### 3. Folder-Specific Sync
+
 ```bash
 minio-simple-copier -project folder-backup -command config \
   -source-endpoint=minio:9000 \
@@ -160,6 +169,7 @@ minio-simple-copier -project myproject -command update-list
 ```
 
 This command:
+
 - Lists all objects in the configured bucket/folder
 - Preserves full folder structure
 - Updates file metadata (size, ETag, last modified)
@@ -171,17 +181,20 @@ This command:
 If you prefer using MinIO Client (mc) or have connectivity issues, you can generate a file list and import it:
 
 1. Generate file list using mc:
+
 ```bash
 # List files and save JSON output
 mc ls --recursive --json source/bucket/folder > file_list.txt
 ```
 
 2. Import the file list:
+
 ```bash
 minio-simple-copier -project myproject -command import-list -import-list=file_list.txt
 ```
 
 This method:
+
 - Reads file metadata from mc's JSON output
 - Preserves full folder structure
 - Skips existing files
@@ -205,6 +218,7 @@ minio-simple-copier -project myproject -command status
 ```
 
 The status command shows:
+
 - Total files and sizes
 - Files by status (pending, completed, error)
 - Recent errors with timestamps
